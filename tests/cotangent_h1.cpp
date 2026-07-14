@@ -89,7 +89,7 @@ void rational_negative_states_and_kernel() {
   CHECK(!cycle.colon_equals_ideal);
 
   laughableengine::SparseEliminationLimits limits;
-  limits.max_kernel_coordinate_entries = 100;
+  limits.max_kernel_nonzeros = 100;
   const auto basis = h1.h1_basis(limits);
   CHECK(basis.size() == 1);
   CHECK(h1.quotient_remainder(basis[0]).is_zero());

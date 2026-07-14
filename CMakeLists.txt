@@ -152,6 +152,13 @@ if(BUILD_TESTING)
     laughableengine_e10_cotangent_h1_tests
     tests/e10_cotangent_h1.cpp
   )
+  add_custom_target(
+    laughableengine_check_e10_qq
+    COMMAND laughableengine_e10_cotangent_h1_tests --qq
+    DEPENDS laughableengine_e10_cotangent_h1_tests
+    COMMENT "Running the complete exact QQ E10 regression"
+    USES_TERMINAL
+  )
   add_executable(laughableengine_tests tests/smoke.cpp)
   add_executable(laughableengine_groebner_tests tests/groebner.cpp)
   add_executable(laughableengine_h1_tests tests/h1.cpp)

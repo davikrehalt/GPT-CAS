@@ -1,3 +1,7 @@
+> **LLM-output notice:** Everything that follows in this README, and the engine
+> implementation it describes, was produced by OpenAI Codex during the session
+> identified by Andy Jiang as **“5.6 Sol Ultra”**, under Andy Jiang's direction.
+
 # laughableengine
 
 > **Status:** Research prototype v0.3.0. Deliberately narrow: this is not a
@@ -283,6 +287,16 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+The ordinary E10 regression runs over `GF(101)` in CTest. Run the complete
+exact characteristic-zero regression explicitly with:
+
+```sh
+cmake --build build --target laughableengine_check_e10_qq
+```
+
+The same check through the public Python API is
+[`examples/e10_direct.py`](examples/e10_direct.py).
+
 Representative commands:
 
 ```sh
@@ -413,3 +427,7 @@ scaling is useful, but remains sensitive to scheduling and memory locality.
 - Nontrivial positive-dimensional principal colon is rejected.
 - Binary wheels link the build machine’s GMP dynamically; bundle GMP before
   distributing a supposedly self-contained macOS wheel.
+
+## License
+
+`laughableengine` is available under the [MIT License](LICENSE).

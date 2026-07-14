@@ -26,7 +26,6 @@ namespace laughableengine {
 // vector space P/m^(2N).  No Groebner basis of J^2 is constructed.
 
 enum class CotangentH1InputIssue {
-  EmptyGeneratorRingMismatch,
   GeneratorRingMismatch,
   GeneratorHasConstantTerm,
   InvalidMaximalPower,
@@ -43,8 +42,6 @@ class CotangentH1InputError : public std::domain_error {
   [[nodiscard]] static const char* message(
       CotangentH1InputIssue issue) noexcept {
     switch (issue) {
-      case CotangentH1InputIssue::EmptyGeneratorRingMismatch:
-        return "internal cotangent-H1 ring probe failed";
       case CotangentH1InputIssue::GeneratorRingMismatch:
         return "every cotangent-H1 generator must belong to the supplied ring";
       case CotangentH1InputIssue::GeneratorHasConstantTerm:
