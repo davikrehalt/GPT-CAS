@@ -1,0 +1,29 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13.6"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "laughableengine"
+version = "0.3.0"
+description = "A native exact kernel for cotangent-H1 computations"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "laughableengine contributors"}]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.scripts]
+laughable-jg-verify = "laughable_jg_verify:main"
+
+[tool.scikit-build]
+cmake.version = ">=3.20"
+cmake.args = [
+  "-DLAUGHABLEENGINE_BUILD_PYTHON=ON",
+  "-DLAUGHABLEENGINE_BUILD_CLI=OFF",
+  "-DBUILD_TESTING=OFF",
+]
+wheel.packages = ["python/laughableengine"]

@@ -1,0 +1,29 @@
+{
+  "schema": "laughable-jg-v1",
+  "field": {
+    "kind": "GF",
+    "modulus": "5"
+  },
+  "variables": [
+    "x"
+  ],
+  "order": "grevlex",
+  "ideal_generators": [
+    [
+      {
+        "coefficient": "1",
+        "exponents": [
+          5
+        ]
+      }
+    ]
+  ],
+  "g": [
+    {
+      "coefficient": "1",
+      "exponents": [
+        5
+      ]
+    }
+  ]
+}
