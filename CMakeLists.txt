@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(
   laughableengine
   VERSION 0.3.0
-  DESCRIPTION "A native exact kernel for cotangent-H1 computations"
+  DESCRIPTION "A small native exact-algebra engine designed to grow"
   LANGUAGES CXX
 )
 
@@ -166,6 +166,10 @@ if(BUILD_TESTING)
     laughableengine_cotangent_h1_tests
     tests/cotangent_h1.cpp
   )
+  add_executable(
+    laughableengine_finite_algebra_tests
+    tests/finite_algebra.cpp
+  )
   add_executable(laughableengine_ideal_tests tests/ideal.cpp)
   add_executable(laughableengine_linear_algebra_tests tests/linear_algebra.cpp)
   add_executable(laughableengine_matrix_tests tests/matrix.cpp)
@@ -239,6 +243,11 @@ if(BUILD_TESTING)
   )
   target_link_libraries(
     laughableengine_cotangent_h1_tests
+    PRIVATE
+      laughableengine::laughableengine
+  )
+  target_link_libraries(
+    laughableengine_finite_algebra_tests
     PRIVATE
       laughableengine::laughableengine
   )
@@ -334,6 +343,7 @@ if(BUILD_TESTING)
   laughableengine_enable_warnings(laughableengine_groebner_tests)
   laughableengine_enable_warnings(laughableengine_h1_tests)
   laughableengine_enable_warnings(laughableengine_cotangent_h1_tests)
+  laughableengine_enable_warnings(laughableengine_finite_algebra_tests)
   laughableengine_enable_warnings(laughableengine_ideal_tests)
   laughableengine_enable_warnings(laughableengine_linear_algebra_tests)
   laughableengine_enable_warnings(laughableengine_matrix_tests)
@@ -377,6 +387,10 @@ if(BUILD_TESTING)
   add_test(
     NAME laughableengine.cotangent_h1
     COMMAND laughableengine_cotangent_h1_tests
+  )
+  add_test(
+    NAME laughableengine.finite_algebra
+    COMMAND laughableengine_finite_algebra_tests
   )
   add_test(NAME laughableengine.ideal COMMAND laughableengine_ideal_tests)
   add_test(

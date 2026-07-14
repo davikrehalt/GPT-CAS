@@ -23,6 +23,7 @@
 #include "laughableengine/cotangent_h1.hpp"
 #include "laughableengine/cycle_audit.hpp"
 #include "laughableengine/discovery.hpp"
+#include "laughableengine/finite_algebra.hpp"
 #include "laughableengine/groebner.hpp"
 #include "laughableengine/h1.hpp"
 #include "laughableengine/ideal.hpp"
@@ -47,6 +48,23 @@ using QQCotangentH1 = le::CotangentH1Presentation<le::RationalField>;
 using GFCotangentH1 = le::CotangentH1Presentation<le::PrimeField>;
 using QQCotangentClassProof = le::CotangentClassProof<le::RationalField>;
 using GFCotangentClassProof = le::CotangentClassProof<le::PrimeField>;
+using QQLocalIdeal = le::OriginPowerIdeal<le::RationalField>;
+using GFLocalIdeal = le::OriginPowerIdeal<le::PrimeField>;
+using QQFiniteQuotient = le::FiniteQuotient<le::RationalField>;
+using GFFiniteQuotient = le::FiniteQuotient<le::PrimeField>;
+using QQConormalModule = le::ConormalModule<le::RationalField>;
+using GFConormalModule = le::ConormalModule<le::PrimeField>;
+using QQConormalDerivativeMap =
+    le::ConormalDerivativeMap<le::RationalField>;
+using GFConormalDerivativeMap = le::ConormalDerivativeMap<le::PrimeField>;
+using QQH1Module = le::CotangentH1Module<le::RationalField>;
+using GFH1Module = le::CotangentH1Module<le::PrimeField>;
+using QQH1Element = le::CotangentH1Element<le::RationalField>;
+using GFH1Element = le::CotangentH1Element<le::PrimeField>;
+using QQQuotientIdeal = le::QuotientIdeal<le::RationalField>;
+using GFQuotientIdeal = le::QuotientIdeal<le::PrimeField>;
+using QQIdealPreimage = le::IdealPreimage<le::RationalField>;
+using GFIdealPreimage = le::IdealPreimage<le::PrimeField>;
 using QQSparseMatrix = le::SparseMatrix<le::RationalField>;
 using GFSparseMatrix = le::SparseMatrix<le::PrimeField>;
 
@@ -55,6 +73,14 @@ class PythonIdeal;
 class PythonCotangentH1Presentation;
 class PythonCotangentClassProof;
 class PythonSparseExactMatrix;
+class PythonLocalIdeal;
+class PythonFiniteQuotient;
+class PythonConormalModule;
+class PythonConormalDerivativeMap;
+class PythonH1Module;
+class PythonH1Element;
+class PythonQuotientIdeal;
+class PythonIdealPreimage;
 struct PythonExactMatrix;
 struct PythonCycleAuditResult;
 struct PythonColonClosureResult;
@@ -135,6 +161,8 @@ class PythonPolynomial {
   friend class PythonRing;
   friend class PythonIdeal;
   friend class PythonCotangentH1Presentation;
+  friend class PythonFiniteQuotient;
+  friend class PythonH1Module;
 };
 
 struct PythonDivisionResult {
@@ -324,6 +352,14 @@ class PythonRing : public std::enable_shared_from_this<PythonRing> {
   [[nodiscard]] PythonCotangentH1Presentation cotangent_h1(
       const std::vector<PythonPolynomial>& generators,
       std::size_t maximal_power,
+      std::size_t max_monomials,
+      std::optional<std::size_t> max_generated_rows,
+      std::optional<std::size_t> max_matrix_triplets);
+  [[nodiscard]] PythonLocalIdeal local_ideal(
+      const std::vector<PythonPolynomial>& generators,
+      std::size_t maximal_power);
+  [[nodiscard]] PythonFiniteQuotient quotient(
+      const PythonLocalIdeal& ideal,
       std::size_t max_monomials,
       std::optional<std::size_t> max_generated_rows,
       std::optional<std::size_t> max_matrix_triplets);
@@ -593,6 +629,9 @@ class PythonSparseExactMatrix {
 
   friend class PythonCotangentH1Presentation;
   friend class PythonCotangentClassProof;
+  friend class PythonConormalModule;
+  friend class PythonConormalDerivativeMap;
+  friend class PythonH1Module;
 };
 
 class PythonCotangentClassProof {
@@ -686,6 +725,232 @@ class PythonCotangentH1Presentation {
   Storage value_;
 
   friend class PythonRing;
+};
+
+// Public finite-algebra handles.  Each object retains the same immutable
+// native context, so moving through ideal -> quotient -> module -> map ->
+// kernel does not rebuild a Groebner basis or copy the large sparse matrices.
+class PythonLocalIdeal {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQLocalIdeal>,
+      std::shared_ptr<const GFLocalIdeal>>;
+
+  [[nodiscard]] const std::shared_ptr<PythonRing>& ring() const noexcept {
+    return ring_;
+  }
+  [[nodiscard]] std::vector<PythonPolynomial> lower_generators() const;
+  [[nodiscard]] std::vector<PythonPolynomial> generators() const;
+  [[nodiscard]] std::size_t maximal_power() const noexcept;
+  [[nodiscard]] PythonFiniteQuotient quotient(
+      std::size_t max_monomials,
+      std::optional<std::size_t> max_generated_rows,
+      std::optional<std::size_t> max_matrix_triplets) const;
+  [[nodiscard]] bool equals(const PythonLocalIdeal& other) const noexcept;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonLocalIdeal(std::shared_ptr<PythonRing> ring, Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonRing;
+  friend class PythonFiniteQuotient;
+  friend class PythonIdealPreimage;
+};
+
+class PythonFiniteQuotient {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQFiniteQuotient>,
+      std::shared_ptr<const GFFiniteQuotient>>;
+
+  [[nodiscard]] const std::shared_ptr<PythonRing>& ring() const noexcept {
+    return ring_;
+  }
+  [[nodiscard]] PythonLocalIdeal defining_ideal() const;
+  [[nodiscard]] std::size_t length() const noexcept;
+  [[nodiscard]] std::size_t square_quotient_length() const;
+  [[nodiscard]] PythonPolynomial remainder(
+      const PythonPolynomial& polynomial) const;
+  [[nodiscard]] std::vector<PythonPolynomial> basis(
+      std::size_t max_coordinate_entries) const;
+  [[nodiscard]] PythonQuotientIdeal zero_ideal() const;
+  [[nodiscard]] PythonConormalModule conormal_module() const;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonFiniteQuotient(std::shared_ptr<PythonRing> ring, Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  void require_polynomial(const PythonPolynomial& polynomial) const;
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonRing;
+  friend class PythonLocalIdeal;
+  friend class PythonConormalModule;
+  friend class PythonH1Module;
+  friend class PythonQuotientIdeal;
+};
+
+class PythonConormalModule {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQConormalModule>,
+      std::shared_ptr<const GFConormalModule>>;
+
+  [[nodiscard]] PythonFiniteQuotient quotient() const;
+  [[nodiscard]] std::size_t dimension() const noexcept;
+  [[nodiscard]] PythonSparseExactMatrix constraint_matrix() const;
+  [[nodiscard]] std::vector<PythonPolynomial> basis(
+      std::size_t max_coordinate_entries) const;
+  [[nodiscard]] PythonConormalDerivativeMap derivative_map() const;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonConormalModule(std::shared_ptr<PythonRing> ring, Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonFiniteQuotient;
+  friend class PythonConormalDerivativeMap;
+  friend class PythonH1Module;
+};
+
+class PythonConormalDerivativeMap {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQConormalDerivativeMap>,
+      std::shared_ptr<const GFConormalDerivativeMap>>;
+
+  [[nodiscard]] PythonConormalModule domain() const;
+  [[nodiscard]] PythonSparseExactMatrix ambient_matrix() const;
+  [[nodiscard]] PythonH1Module kernel() const;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonConormalDerivativeMap(
+      std::shared_ptr<PythonRing> ring,
+      Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonConormalModule;
+  friend class PythonH1Module;
+};
+
+class PythonH1Module {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQH1Module>,
+      std::shared_ptr<const GFH1Module>>;
+
+  [[nodiscard]] PythonFiniteQuotient quotient() const;
+  [[nodiscard]] PythonConormalModule conormal_module() const;
+  [[nodiscard]] std::size_t dimension() const noexcept;
+  [[nodiscard]] std::size_t ambient_dimension() const noexcept;
+  [[nodiscard]] PythonSparseExactMatrix constraint_matrix() const;
+  [[nodiscard]] py::list kernel_coordinates(
+      std::size_t max_coordinate_entries) const;
+  [[nodiscard]] std::vector<PythonPolynomial> basis(
+      std::size_t max_coordinate_entries) const;
+  [[nodiscard]] PythonH1Element class_of(
+      const PythonPolynomial& representative) const;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonH1Module(std::shared_ptr<PythonRing> ring, Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  void require_polynomial(const PythonPolynomial& polynomial) const;
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonConormalDerivativeMap;
+  friend class PythonH1Element;
+};
+
+class PythonH1Element {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQH1Element>,
+      std::shared_ptr<const GFH1Element>>;
+
+  [[nodiscard]] PythonH1Module module() const;
+  [[nodiscard]] PythonPolynomial representative() const;
+  [[nodiscard]] py::list coordinates() const;
+  [[nodiscard]] PythonQuotientIdeal annihilator() const;
+  [[nodiscard]] bool equals(const PythonH1Element& other) const noexcept;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonH1Element(std::shared_ptr<PythonRing> ring, Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonH1Module;
+};
+
+class PythonQuotientIdeal {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQQuotientIdeal>,
+      std::shared_ptr<const GFQuotientIdeal>>;
+
+  [[nodiscard]] PythonFiniteQuotient quotient() const;
+  [[nodiscard]] std::size_t dimension() const noexcept;
+  [[nodiscard]] bool is_zero() const noexcept;
+  [[nodiscard]] py::list basis_coordinates() const;
+  [[nodiscard]] std::vector<PythonPolynomial> generators() const;
+  [[nodiscard]] PythonIdealPreimage preimage() const;
+  [[nodiscard]] bool equals(const PythonQuotientIdeal& other) const noexcept;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonQuotientIdeal(std::shared_ptr<PythonRing> ring, Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonFiniteQuotient;
+  friend class PythonH1Element;
+  friend class PythonIdealPreimage;
+};
+
+class PythonIdealPreimage {
+ public:
+  using Storage = std::variant<
+      std::shared_ptr<const QQIdealPreimage>,
+      std::shared_ptr<const GFIdealPreimage>>;
+
+  [[nodiscard]] PythonQuotientIdeal quotient_ideal() const;
+  [[nodiscard]] PythonLocalIdeal source_ideal() const;
+  [[nodiscard]] std::vector<PythonPolynomial> generators() const;
+  [[nodiscard]] bool equals_source_ideal() const noexcept;
+  [[nodiscard]] bool equals(const PythonIdealPreimage& other) const noexcept;
+  [[nodiscard]] bool equals(const PythonLocalIdeal& other) const noexcept;
+  [[nodiscard]] std::string to_string() const;
+
+ private:
+  PythonIdealPreimage(std::shared_ptr<PythonRing> ring, Storage value)
+      : ring_(std::move(ring)), value_(std::move(value)) {}
+
+  std::shared_ptr<PythonRing> ring_;
+  Storage value_;
+
+  friend class PythonQuotientIdeal;
 };
 
 // A language-neutral, shape-preserving view of an exact dense matrix.  The
@@ -1158,6 +1423,38 @@ PythonCotangentH1Presentation PythonRing::cotangent_h1(
   return PythonCotangentH1Presentation(
       shared_from_this(),
       PythonCotangentH1Presentation::Storage(std::move(native)));
+}
+
+PythonLocalIdeal PythonRing::local_ideal(
+    const std::vector<PythonPolynomial>& generators,
+    std::size_t maximal_power) {
+  if (std::holds_alternative<QQRing>(value_)) {
+    auto concrete = concrete_polynomials<QQPolynomial>(generators);
+    auto ideal = le::origin_power_ideal(
+        std::get<QQRing>(value_), std::move(concrete), maximal_power);
+    auto native = std::make_shared<const QQLocalIdeal>(std::move(ideal));
+    return PythonLocalIdeal(
+        shared_from_this(), PythonLocalIdeal::Storage(std::move(native)));
+  }
+  auto concrete = concrete_polynomials<GFPolynomial>(generators);
+  auto ideal = le::origin_power_ideal(
+      std::get<GFRing>(value_), std::move(concrete), maximal_power);
+  auto native = std::make_shared<const GFLocalIdeal>(std::move(ideal));
+  return PythonLocalIdeal(
+      shared_from_this(), PythonLocalIdeal::Storage(std::move(native)));
+}
+
+PythonFiniteQuotient PythonRing::quotient(
+    const PythonLocalIdeal& ideal,
+    std::size_t max_monomials,
+    std::optional<std::size_t> max_generated_rows,
+    std::optional<std::size_t> max_matrix_triplets) {
+  if (ideal.ring_.get() != this) {
+    throw std::invalid_argument(
+        "local ideals must belong to this exact ring context");
+  }
+  return ideal.quotient(
+      max_monomials, max_generated_rows, max_matrix_triplets);
 }
 
 std::vector<PythonPolynomial> PythonIdeal::generators() const {
@@ -1820,6 +2117,716 @@ bool PythonCotangentClassProof::conclusive() const noexcept {
 std::string PythonCotangentClassProof::to_string() const {
   return "CotangentClassProof(status='" + status() + "', faithful=" +
          std::string(faithful() ? "True" : "False") + ")";
+}
+
+std::vector<PythonPolynomial> PythonLocalIdeal::lower_generators() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQLocalIdeal>>(&value_)) {
+    const auto values = (*native)->lower_generators();
+    return ring_->wrap_all(
+        std::vector<QQPolynomial>(values.begin(), values.end()));
+  }
+  const auto& native = std::get<std::shared_ptr<const GFLocalIdeal>>(value_);
+  const auto values = native->lower_generators();
+  return ring_->wrap_all(
+      std::vector<GFPolynomial>(values.begin(), values.end()));
+}
+
+std::vector<PythonPolynomial> PythonLocalIdeal::generators() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQLocalIdeal>>(&value_)) {
+    return ring_->wrap_all((*native)->generators());
+  }
+  return ring_->wrap_all(
+      std::get<std::shared_ptr<const GFLocalIdeal>>(value_)->generators());
+}
+
+std::size_t PythonLocalIdeal::maximal_power() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->maximal_power(); }, value_);
+}
+
+PythonFiniteQuotient PythonLocalIdeal::quotient(
+    std::size_t max_monomials,
+    std::optional<std::size_t> max_generated_rows,
+    std::optional<std::size_t> max_matrix_triplets) const {
+  le::CotangentH1Options options;
+  options.monomial_space_limits.maximum_monomials = max_monomials;
+  options.max_generated_rows = max_generated_rows;
+  options.max_matrix_triplets = max_matrix_triplets;
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQLocalIdeal>>(&value_)) {
+    auto quotient = cotangent_without_gil(
+        [&] { return (*native)->quotient(options); });
+    auto shared =
+        std::make_shared<const QQFiniteQuotient>(std::move(quotient));
+    return PythonFiniteQuotient(
+        ring_, PythonFiniteQuotient::Storage(std::move(shared)));
+  }
+  const auto& native = std::get<std::shared_ptr<const GFLocalIdeal>>(value_);
+  auto quotient =
+      cotangent_without_gil([&] { return native->quotient(options); });
+  auto shared =
+      std::make_shared<const GFFiniteQuotient>(std::move(quotient));
+  return PythonFiniteQuotient(
+      ring_, PythonFiniteQuotient::Storage(std::move(shared)));
+}
+
+bool PythonLocalIdeal::equals(const PythonLocalIdeal& other) const noexcept {
+  if (ring_.get() != other.ring_.get() ||
+      value_.index() != other.value_.index()) {
+    return false;
+  }
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQLocalIdeal>>(&value_)) {
+    return (*native)->same_presentation(
+        *std::get<std::shared_ptr<const QQLocalIdeal>>(other.value_));
+  }
+  return std::get<std::shared_ptr<const GFLocalIdeal>>(value_)
+      ->same_presentation(
+          *std::get<std::shared_ptr<const GFLocalIdeal>>(other.value_));
+}
+
+std::string PythonLocalIdeal::to_string() const {
+  const auto lower_count = std::visit(
+      [](const auto& native) { return native->lower_generators().size(); },
+      value_);
+  return "LocalIdeal(lower_generators=" +
+         std::to_string(lower_count) + ", maximal_power=" +
+         std::to_string(maximal_power()) + ")";
+}
+
+void PythonFiniteQuotient::require_polynomial(
+    const PythonPolynomial& polynomial) const {
+  if (polynomial.ring().get() != ring_.get()) {
+    throw std::invalid_argument(
+        "finite-quotient polynomials must belong to its exact ring context");
+  }
+}
+
+PythonLocalIdeal PythonFiniteQuotient::defining_ideal() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQFiniteQuotient>>(&value_)) {
+    auto ideal = std::make_shared<const QQLocalIdeal>(
+        (*native)->defining_ideal());
+    return PythonLocalIdeal(
+        ring_, PythonLocalIdeal::Storage(std::move(ideal)));
+  }
+  auto ideal = std::make_shared<const GFLocalIdeal>(
+      std::get<std::shared_ptr<const GFFiniteQuotient>>(value_)
+          ->defining_ideal());
+  return PythonLocalIdeal(
+      ring_, PythonLocalIdeal::Storage(std::move(ideal)));
+}
+
+std::size_t PythonFiniteQuotient::length() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->dimension(); }, value_);
+}
+
+std::size_t PythonFiniteQuotient::square_quotient_length() const {
+  return cotangent_without_gil([&] {
+    return std::visit(
+        [](const auto& native) {
+          return native->square_quotient_dimension();
+        },
+        value_);
+  });
+}
+
+PythonPolynomial PythonFiniteQuotient::remainder(
+    const PythonPolynomial& polynomial) const {
+  require_polynomial(polynomial);
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQFiniteQuotient>>(&value_)) {
+    auto result = without_gil([&] {
+      return (*native)->remainder(
+          std::get<QQPolynomial>(polynomial.value_));
+    });
+    return ring_->wrap(std::move(result));
+  }
+  auto result = without_gil([&] {
+    return std::get<std::shared_ptr<const GFFiniteQuotient>>(value_)
+        ->remainder(std::get<GFPolynomial>(polynomial.value_));
+  });
+  return ring_->wrap(std::move(result));
+}
+
+std::vector<PythonPolynomial> PythonFiniteQuotient::basis(
+    std::size_t max_coordinate_entries) const {
+  require_coordinate_budget(
+      length(), 1, max_coordinate_entries, "explicit quotient basis");
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQFiniteQuotient>>(&value_)) {
+    return ring_->wrap_all((*native)->basis_representatives());
+  }
+  return ring_->wrap_all(
+      std::get<std::shared_ptr<const GFFiniteQuotient>>(value_)
+          ->basis_representatives());
+}
+
+PythonQuotientIdeal PythonFiniteQuotient::zero_ideal() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQFiniteQuotient>>(&value_)) {
+    auto ideal = std::make_shared<const QQQuotientIdeal>(
+        (*native)->zero_ideal());
+    return PythonQuotientIdeal(
+        ring_, PythonQuotientIdeal::Storage(std::move(ideal)));
+  }
+  auto ideal = std::make_shared<const GFQuotientIdeal>(
+      std::get<std::shared_ptr<const GFFiniteQuotient>>(value_)
+          ->zero_ideal());
+  return PythonQuotientIdeal(
+      ring_, PythonQuotientIdeal::Storage(std::move(ideal)));
+}
+
+PythonConormalModule PythonFiniteQuotient::conormal_module() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQFiniteQuotient>>(&value_)) {
+    auto native_module = cotangent_without_gil(
+        [&] { return (*native)->conormal_module(); });
+    auto module = std::make_shared<const QQConormalModule>(
+        std::move(native_module));
+    return PythonConormalModule(
+        ring_, PythonConormalModule::Storage(std::move(module)));
+  }
+  const auto& native =
+      std::get<std::shared_ptr<const GFFiniteQuotient>>(value_);
+  auto native_module = cotangent_without_gil(
+      [&] { return native->conormal_module(); });
+  auto module = std::make_shared<const GFConormalModule>(
+      std::move(native_module));
+  return PythonConormalModule(
+      ring_, PythonConormalModule::Storage(std::move(module)));
+}
+
+std::string PythonFiniteQuotient::to_string() const {
+  return "FiniteQuotient(length=" + std::to_string(length()) + ")";
+}
+
+PythonFiniteQuotient PythonConormalModule::quotient() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQConormalModule>>(&value_)) {
+    auto quotient =
+        std::make_shared<const QQFiniteQuotient>((*native)->algebra());
+    return PythonFiniteQuotient(
+        ring_, PythonFiniteQuotient::Storage(std::move(quotient)));
+  }
+  auto quotient = std::make_shared<const GFFiniteQuotient>(
+      std::get<std::shared_ptr<const GFConormalModule>>(value_)->algebra());
+  return PythonFiniteQuotient(
+      ring_, PythonFiniteQuotient::Storage(std::move(quotient)));
+}
+
+std::size_t PythonConormalModule::dimension() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->dimension(); }, value_);
+}
+
+PythonSparseExactMatrix PythonConormalModule::constraint_matrix() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQConormalModule>>(&value_)) {
+    return PythonSparseExactMatrix::from_qq(
+        *native, (*native)->defining_matrix());
+  }
+  const auto& native =
+      std::get<std::shared_ptr<const GFConormalModule>>(value_);
+  return PythonSparseExactMatrix::from_gf(
+      native, native->defining_matrix());
+}
+
+std::vector<PythonPolynomial> PythonConormalModule::basis(
+    std::size_t max_coordinate_entries) const {
+  le::SparseEliminationLimits limits;
+  limits.max_kernel_nonzeros = max_coordinate_entries;
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQConormalModule>>(&value_)) {
+    auto result = cotangent_without_gil(
+        [&] { return (*native)->representative_basis(limits); });
+    return ring_->wrap_all(std::move(result));
+  }
+  const auto& native =
+      std::get<std::shared_ptr<const GFConormalModule>>(value_);
+  auto result = cotangent_without_gil(
+      [&] { return native->representative_basis(limits); });
+  return ring_->wrap_all(std::move(result));
+}
+
+PythonConormalDerivativeMap PythonConormalModule::derivative_map() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQConormalModule>>(&value_)) {
+    auto native_map = cotangent_without_gil(
+        [&] { return (*native)->derivative_map(); });
+    auto map = std::make_shared<const QQConormalDerivativeMap>(
+        std::move(native_map));
+    return PythonConormalDerivativeMap(
+        ring_, PythonConormalDerivativeMap::Storage(std::move(map)));
+  }
+  const auto& native =
+      std::get<std::shared_ptr<const GFConormalModule>>(value_);
+  auto native_map = cotangent_without_gil(
+      [&] { return native->derivative_map(); });
+  auto map = std::make_shared<const GFConormalDerivativeMap>(
+      std::move(native_map));
+  return PythonConormalDerivativeMap(
+      ring_, PythonConormalDerivativeMap::Storage(std::move(map)));
+}
+
+std::string PythonConormalModule::to_string() const {
+  return "ConormalModule(dimension=" + std::to_string(dimension()) + ")";
+}
+
+PythonConormalModule PythonConormalDerivativeMap::domain() const {
+  if (const auto* native = std::get_if<
+          std::shared_ptr<const QQConormalDerivativeMap>>(&value_)) {
+    auto module =
+        std::make_shared<const QQConormalModule>((*native)->domain());
+    return PythonConormalModule(
+        ring_, PythonConormalModule::Storage(std::move(module)));
+  }
+  auto module = std::make_shared<const GFConormalModule>(
+      std::get<std::shared_ptr<const GFConormalDerivativeMap>>(value_)
+          ->domain());
+  return PythonConormalModule(
+      ring_, PythonConormalModule::Storage(std::move(module)));
+}
+
+PythonSparseExactMatrix PythonConormalDerivativeMap::ambient_matrix() const {
+  if (const auto* native = std::get_if<
+          std::shared_ptr<const QQConormalDerivativeMap>>(&value_)) {
+    return PythonSparseExactMatrix::from_qq(
+        *native, (*native)->ambient_matrix());
+  }
+  const auto& native =
+      std::get<std::shared_ptr<const GFConormalDerivativeMap>>(value_);
+  return PythonSparseExactMatrix::from_gf(
+      native, native->ambient_matrix());
+}
+
+PythonH1Module PythonConormalDerivativeMap::kernel() const {
+  if (const auto* native = std::get_if<
+          std::shared_ptr<const QQConormalDerivativeMap>>(&value_)) {
+    auto native_module = cotangent_without_gil(
+        [&] { return (*native)->kernel(); });
+    auto module = std::make_shared<const QQH1Module>(
+        std::move(native_module));
+    return PythonH1Module(
+        ring_, PythonH1Module::Storage(std::move(module)));
+  }
+  const auto& native =
+      std::get<std::shared_ptr<const GFConormalDerivativeMap>>(value_);
+  auto native_module = cotangent_without_gil(
+      [&] { return native->kernel(); });
+  auto module = std::make_shared<const GFH1Module>(
+      std::move(native_module));
+  return PythonH1Module(
+      ring_, PythonH1Module::Storage(std::move(module)));
+}
+
+std::string PythonConormalDerivativeMap::to_string() const {
+  const auto shape = ambient_matrix().shape();
+  return "ConormalDerivativeMap(shape=(" +
+         std::to_string(shape[0].cast<std::size_t>()) + ", " +
+         std::to_string(shape[1].cast<std::size_t>()) + "))";
+}
+
+PythonFiniteQuotient PythonH1Module::quotient() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Module>>(&value_)) {
+    auto quotient =
+        std::make_shared<const QQFiniteQuotient>((*native)->algebra());
+    return PythonFiniteQuotient(
+        ring_, PythonFiniteQuotient::Storage(std::move(quotient)));
+  }
+  auto quotient = std::make_shared<const GFFiniteQuotient>(
+      std::get<std::shared_ptr<const GFH1Module>>(value_)->algebra());
+  return PythonFiniteQuotient(
+      ring_, PythonFiniteQuotient::Storage(std::move(quotient)));
+}
+
+PythonConormalModule PythonH1Module::conormal_module() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Module>>(&value_)) {
+    auto module =
+        std::make_shared<const QQConormalModule>((*native)->conormal());
+    return PythonConormalModule(
+        ring_, PythonConormalModule::Storage(std::move(module)));
+  }
+  auto module = std::make_shared<const GFConormalModule>(
+      std::get<std::shared_ptr<const GFH1Module>>(value_)->conormal());
+  return PythonConormalModule(
+      ring_, PythonConormalModule::Storage(std::move(module)));
+}
+
+std::size_t PythonH1Module::dimension() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->dimension(); }, value_);
+}
+
+std::size_t PythonH1Module::ambient_dimension() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->ambient_dimension(); }, value_);
+}
+
+PythonSparseExactMatrix PythonH1Module::constraint_matrix() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Module>>(&value_)) {
+    return PythonSparseExactMatrix::from_qq(
+        *native, (*native)->defining_matrix());
+  }
+  const auto& native = std::get<std::shared_ptr<const GFH1Module>>(value_);
+  return PythonSparseExactMatrix::from_gf(
+      native, native->defining_matrix());
+}
+
+py::list PythonH1Module::kernel_coordinates(
+    std::size_t max_coordinate_entries) const {
+  le::SparseEliminationLimits limits;
+  limits.max_kernel_nonzeros = max_coordinate_entries;
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Module>>(&value_)) {
+    const auto rows = cotangent_without_gil(
+        [&] { return (*native)->basis_coordinates(limits); });
+    py::list triples;
+    for (std::size_t basis = 0; basis < rows.size(); ++basis) {
+      for (const auto& entry : rows[basis]) {
+        triples.append(py::make_tuple(
+            basis, entry.column,
+            python_exact_value(
+                (*native)->algebra().field(), entry.value)));
+      }
+    }
+    return triples;
+  }
+  const auto& native = std::get<std::shared_ptr<const GFH1Module>>(value_);
+  const auto rows = cotangent_without_gil(
+      [&] { return native->basis_coordinates(limits); });
+  py::list triples;
+  for (std::size_t basis = 0; basis < rows.size(); ++basis) {
+    for (const auto& entry : rows[basis]) {
+      triples.append(py::make_tuple(
+          basis, entry.column,
+          python_exact_value(native->algebra().field(), entry.value)));
+    }
+  }
+  return triples;
+}
+
+std::vector<PythonPolynomial> PythonH1Module::basis(
+    std::size_t max_coordinate_entries) const {
+  le::SparseEliminationLimits limits;
+  limits.max_kernel_nonzeros = max_coordinate_entries;
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Module>>(&value_)) {
+    auto result = cotangent_without_gil(
+        [&] { return (*native)->representative_basis(limits); });
+    return ring_->wrap_all(std::move(result));
+  }
+  const auto& native = std::get<std::shared_ptr<const GFH1Module>>(value_);
+  auto result = cotangent_without_gil(
+      [&] { return native->representative_basis(limits); });
+  return ring_->wrap_all(std::move(result));
+}
+
+void PythonH1Module::require_polynomial(
+    const PythonPolynomial& polynomial) const {
+  if (polynomial.ring().get() != ring_.get()) {
+    throw std::invalid_argument(
+        "cotangent-H1 representatives must belong to its exact ring context");
+  }
+}
+
+PythonH1Element PythonH1Module::class_of(
+    const PythonPolynomial& representative) const {
+  require_polynomial(representative);
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Module>>(&value_)) {
+    auto element = cotangent_without_gil([&] {
+      return (*native)->class_of(
+          std::get<QQPolynomial>(representative.value_));
+    });
+    auto shared = std::make_shared<const QQH1Element>(std::move(element));
+    return PythonH1Element(
+        ring_, PythonH1Element::Storage(std::move(shared)));
+  }
+  const auto& native = std::get<std::shared_ptr<const GFH1Module>>(value_);
+  auto element = cotangent_without_gil([&] {
+    return native->class_of(
+        std::get<GFPolynomial>(representative.value_));
+  });
+  auto shared = std::make_shared<const GFH1Element>(std::move(element));
+  return PythonH1Element(
+      ring_, PythonH1Element::Storage(std::move(shared)));
+}
+
+std::string PythonH1Module::to_string() const {
+  return "H1Module(dimension=" + std::to_string(dimension()) + ")";
+}
+
+PythonH1Module PythonH1Element::module() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Element>>(&value_)) {
+    auto module = std::make_shared<const QQH1Module>((*native)->module());
+    return PythonH1Module(
+        ring_, PythonH1Module::Storage(std::move(module)));
+  }
+  auto module = std::make_shared<const GFH1Module>(
+      std::get<std::shared_ptr<const GFH1Element>>(value_)->module());
+  return PythonH1Module(
+      ring_, PythonH1Module::Storage(std::move(module)));
+}
+
+PythonPolynomial PythonH1Element::representative() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Element>>(&value_)) {
+    return ring_->wrap((*native)->representative());
+  }
+  return ring_->wrap(
+      std::get<std::shared_ptr<const GFH1Element>>(value_)
+          ->representative());
+}
+
+py::list PythonH1Element::coordinates() const {
+  py::list result;
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Element>>(&value_)) {
+    const auto field = (*native)->module().algebra().field();
+    for (const auto& entry : (*native)->coordinates()) {
+      result.append(py::make_tuple(
+          entry.column, python_exact_value(field, entry.value)));
+    }
+    return result;
+  }
+  const auto& native = std::get<std::shared_ptr<const GFH1Element>>(value_);
+  const auto field = native->module().algebra().field();
+  for (const auto& entry : native->coordinates()) {
+    result.append(py::make_tuple(
+        entry.column, python_exact_value(field, entry.value)));
+  }
+  return result;
+}
+
+PythonQuotientIdeal PythonH1Element::annihilator() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Element>>(&value_)) {
+    auto ideal = cotangent_without_gil(
+        [&] { return (*native)->annihilator(); });
+    auto shared = std::make_shared<const QQQuotientIdeal>(std::move(ideal));
+    return PythonQuotientIdeal(
+        ring_, PythonQuotientIdeal::Storage(std::move(shared)));
+  }
+  const auto& native = std::get<std::shared_ptr<const GFH1Element>>(value_);
+  auto ideal = cotangent_without_gil([&] { return native->annihilator(); });
+  auto shared = std::make_shared<const GFQuotientIdeal>(std::move(ideal));
+  return PythonQuotientIdeal(
+      ring_, PythonQuotientIdeal::Storage(std::move(shared)));
+}
+
+bool PythonH1Element::equals(const PythonH1Element& other) const noexcept {
+  if (ring_.get() != other.ring_.get() ||
+      value_.index() != other.value_.index()) {
+    return false;
+  }
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQH1Element>>(&value_)) {
+    return **native ==
+           *std::get<std::shared_ptr<const QQH1Element>>(other.value_);
+  }
+  return *std::get<std::shared_ptr<const GFH1Element>>(value_) ==
+         *std::get<std::shared_ptr<const GFH1Element>>(other.value_);
+}
+
+std::string PythonH1Element::to_string() const {
+  // Keep repr bounded even when a representative has hundreds of terms.
+  const auto term_count = std::visit(
+      [](const auto& native) {
+        return native->representative().term_count();
+      },
+      value_);
+  return "H1Element(representative_terms=" +
+         std::to_string(term_count) + ")";
+}
+
+PythonFiniteQuotient PythonQuotientIdeal::quotient() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQQuotientIdeal>>(&value_)) {
+    auto quotient =
+        std::make_shared<const QQFiniteQuotient>((*native)->quotient());
+    return PythonFiniteQuotient(
+        ring_, PythonFiniteQuotient::Storage(std::move(quotient)));
+  }
+  auto quotient = std::make_shared<const GFFiniteQuotient>(
+      std::get<std::shared_ptr<const GFQuotientIdeal>>(value_)->quotient());
+  return PythonFiniteQuotient(
+      ring_, PythonFiniteQuotient::Storage(std::move(quotient)));
+}
+
+std::size_t PythonQuotientIdeal::dimension() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->dimension(); }, value_);
+}
+
+bool PythonQuotientIdeal::is_zero() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->is_zero(); }, value_);
+}
+
+py::list PythonQuotientIdeal::basis_coordinates() const {
+  py::list rows;
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQQuotientIdeal>>(&value_)) {
+    const auto field = (*native)->quotient().field();
+    for (const auto& row : (*native)->basis_coordinates()) {
+      py::list values;
+      for (const auto& value : row) {
+        values.append(python_exact_value(field, value));
+      }
+      rows.append(std::move(values));
+    }
+    return rows;
+  }
+  const auto& native =
+      std::get<std::shared_ptr<const GFQuotientIdeal>>(value_);
+  const auto field = native->quotient().field();
+  for (const auto& row : native->basis_coordinates()) {
+    py::list values;
+    for (const auto& value : row) {
+      values.append(python_exact_value(field, value));
+    }
+    rows.append(std::move(values));
+  }
+  return rows;
+}
+
+std::vector<PythonPolynomial> PythonQuotientIdeal::generators() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQQuotientIdeal>>(&value_)) {
+    const auto& values = (*native)->lift_basis();
+    return ring_->wrap_all(
+        std::vector<QQPolynomial>(values.begin(), values.end()));
+  }
+  const auto& values =
+      std::get<std::shared_ptr<const GFQuotientIdeal>>(value_)->lift_basis();
+  return ring_->wrap_all(
+      std::vector<GFPolynomial>(values.begin(), values.end()));
+}
+
+PythonIdealPreimage PythonQuotientIdeal::preimage() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQQuotientIdeal>>(&value_)) {
+    auto preimage =
+        std::make_shared<const QQIdealPreimage>((*native)->preimage());
+    return PythonIdealPreimage(
+        ring_, PythonIdealPreimage::Storage(std::move(preimage)));
+  }
+  auto preimage = std::make_shared<const GFIdealPreimage>(
+      std::get<std::shared_ptr<const GFQuotientIdeal>>(value_)->preimage());
+  return PythonIdealPreimage(
+      ring_, PythonIdealPreimage::Storage(std::move(preimage)));
+}
+
+bool PythonQuotientIdeal::equals(
+    const PythonQuotientIdeal& other) const noexcept {
+  if (ring_.get() != other.ring_.get() ||
+      value_.index() != other.value_.index()) {
+    return false;
+  }
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQQuotientIdeal>>(&value_)) {
+    return **native ==
+           *std::get<std::shared_ptr<const QQQuotientIdeal>>(other.value_);
+  }
+  return *std::get<std::shared_ptr<const GFQuotientIdeal>>(value_) ==
+         *std::get<std::shared_ptr<const GFQuotientIdeal>>(other.value_);
+}
+
+std::string PythonQuotientIdeal::to_string() const {
+  return "QuotientIdeal(dimension=" + std::to_string(dimension()) + ")";
+}
+
+PythonQuotientIdeal PythonIdealPreimage::quotient_ideal() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQIdealPreimage>>(&value_)) {
+    auto ideal = std::make_shared<const QQQuotientIdeal>(
+        (*native)->quotient_ideal());
+    return PythonQuotientIdeal(
+        ring_, PythonQuotientIdeal::Storage(std::move(ideal)));
+  }
+  auto ideal = std::make_shared<const GFQuotientIdeal>(
+      std::get<std::shared_ptr<const GFIdealPreimage>>(value_)
+          ->quotient_ideal());
+  return PythonQuotientIdeal(
+      ring_, PythonQuotientIdeal::Storage(std::move(ideal)));
+}
+
+PythonLocalIdeal PythonIdealPreimage::source_ideal() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQIdealPreimage>>(&value_)) {
+    auto ideal =
+        std::make_shared<const QQLocalIdeal>((*native)->source_ideal());
+    return PythonLocalIdeal(
+        ring_, PythonLocalIdeal::Storage(std::move(ideal)));
+  }
+  auto ideal = std::make_shared<const GFLocalIdeal>(
+      std::get<std::shared_ptr<const GFIdealPreimage>>(value_)
+          ->source_ideal());
+  return PythonLocalIdeal(
+      ring_, PythonLocalIdeal::Storage(std::move(ideal)));
+}
+
+std::vector<PythonPolynomial> PythonIdealPreimage::generators() const {
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQIdealPreimage>>(&value_)) {
+    return ring_->wrap_all((*native)->generators());
+  }
+  return ring_->wrap_all(
+      std::get<std::shared_ptr<const GFIdealPreimage>>(value_)
+          ->generators());
+}
+
+bool PythonIdealPreimage::equals_source_ideal() const noexcept {
+  return std::visit(
+      [](const auto& native) { return native->equals_source_ideal(); }, value_);
+}
+
+bool PythonIdealPreimage::equals(
+    const PythonIdealPreimage& other) const noexcept {
+  if (ring_.get() != other.ring_.get() ||
+      value_.index() != other.value_.index()) {
+    return false;
+  }
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQIdealPreimage>>(&value_)) {
+    return **native ==
+           *std::get<std::shared_ptr<const QQIdealPreimage>>(other.value_);
+  }
+  return *std::get<std::shared_ptr<const GFIdealPreimage>>(value_) ==
+         *std::get<std::shared_ptr<const GFIdealPreimage>>(other.value_);
+}
+
+bool PythonIdealPreimage::equals(
+    const PythonLocalIdeal& other) const noexcept {
+  if (ring_.get() != other.ring_.get() ||
+      value_.index() != other.value_.index()) {
+    return false;
+  }
+  if (const auto* native =
+          std::get_if<std::shared_ptr<const QQIdealPreimage>>(&value_)) {
+    return **native ==
+           *std::get<std::shared_ptr<const QQLocalIdeal>>(other.value_);
+  }
+  return *std::get<std::shared_ptr<const GFIdealPreimage>>(value_) ==
+         *std::get<std::shared_ptr<const GFLocalIdeal>>(other.value_);
+}
+
+std::string PythonIdealPreimage::to_string() const {
+  const auto additional_dimension = std::visit(
+      [](const auto& native) {
+        return native->quotient_ideal().dimension();
+      },
+      value_);
+  return "IdealPreimage(additional_dimension=" +
+         std::to_string(additional_dimension) + ")";
 }
 
 [[nodiscard]] std::string cycle_status_name(le::CycleAuditStatus status) {
@@ -2705,6 +3712,8 @@ PYBIND11_MODULE(_laughableengine, module) {
       module, "FullH1ResourceLimit", PyExc_RuntimeError);
   py::register_exception<le::CotangentH1InputError>(
       module, "CotangentH1InputError", PyExc_ValueError);
+  py::register_exception<le::CotangentClassError>(
+      module, "CotangentClassError", PyExc_ValueError);
   py::register_exception<le::CotangentH1ResourceLimit>(
       module, "CotangentH1ResourceLimit", PyExc_RuntimeError);
   py::register_exception<le::InverseSystemResourceLimit>(
@@ -2893,6 +3902,171 @@ PYBIND11_MODULE(_laughableengine, module) {
       .def("verify_class", &PythonCotangentH1Presentation::verify_class,
            py::arg("representative"))
       .def("__repr__", &PythonCotangentH1Presentation::to_string);
+
+  auto local_ideal = py::class_<PythonLocalIdeal>(module, "LocalIdeal")
+      .def_property_readonly("ring", &PythonLocalIdeal::ring)
+      .def_property_readonly(
+          "lower_generators", &PythonLocalIdeal::lower_generators)
+      .def_property_readonly(
+          "maximal_power", &PythonLocalIdeal::maximal_power)
+      .def("generators", &PythonLocalIdeal::generators)
+      .def(
+          "quotient", &PythonLocalIdeal::quotient, py::kw_only(),
+          py::arg("max_monomials") = 1'000'000,
+          py::arg("max_generated_rows") = 2'000'000,
+          py::arg("max_matrix_triplets") = 20'000'000)
+      .def(
+          "__eq__",
+          [](const PythonLocalIdeal& left, const py::object& right) {
+            if (py::isinstance<PythonLocalIdeal>(right)) {
+              return left.equals(right.cast<PythonLocalIdeal>());
+            }
+            if (py::isinstance<PythonIdealPreimage>(right)) {
+              return right.cast<PythonIdealPreimage>().equals(left);
+            }
+            return false;
+          },
+          py::is_operator())
+      .def(
+          "__ne__",
+          [](const PythonLocalIdeal& left, const py::object& right) {
+            if (py::isinstance<PythonLocalIdeal>(right)) {
+              return !left.equals(right.cast<PythonLocalIdeal>());
+            }
+            if (py::isinstance<PythonIdealPreimage>(right)) {
+              return !right.cast<PythonIdealPreimage>().equals(left);
+            }
+            return true;
+          },
+          py::is_operator())
+      .def("__repr__", &PythonLocalIdeal::to_string);
+  local_ideal.attr("__hash__") = py::none();
+
+  py::class_<PythonFiniteQuotient>(module, "FiniteQuotient")
+      .def_property_readonly("ring", &PythonFiniteQuotient::ring)
+      .def_property_readonly(
+          "defining_ideal", &PythonFiniteQuotient::defining_ideal)
+      .def_property_readonly("length", &PythonFiniteQuotient::length)
+      .def_property_readonly(
+          "square_quotient_length",
+          &PythonFiniteQuotient::square_quotient_length)
+      .def("remainder", &PythonFiniteQuotient::remainder,
+           py::arg("polynomial"))
+      .def("basis", &PythonFiniteQuotient::basis, py::kw_only(),
+           py::arg("max_coordinate_entries") = 1'000'000)
+      .def("zero_ideal", &PythonFiniteQuotient::zero_ideal)
+      .def("conormal_module", &PythonFiniteQuotient::conormal_module)
+      .def("__repr__", &PythonFiniteQuotient::to_string);
+
+  py::class_<PythonConormalModule>(module, "ConormalModule")
+      .def_property_readonly("quotient", &PythonConormalModule::quotient)
+      .def_property_readonly("dimension", &PythonConormalModule::dimension)
+      .def_property_readonly(
+          "constraint_matrix", &PythonConormalModule::constraint_matrix)
+      .def("basis", &PythonConormalModule::basis, py::kw_only(),
+           py::arg("max_coordinate_entries") = 1'000'000)
+      .def("derivative_map", &PythonConormalModule::derivative_map)
+      .def("__repr__", &PythonConormalModule::to_string);
+
+  py::class_<PythonConormalDerivativeMap>(
+      module, "ConormalDerivativeMap")
+      .def_property_readonly(
+          "domain", &PythonConormalDerivativeMap::domain)
+      .def_property_readonly(
+          "ambient_matrix", &PythonConormalDerivativeMap::ambient_matrix)
+      .def("kernel", &PythonConormalDerivativeMap::kernel)
+      .def("__repr__", &PythonConormalDerivativeMap::to_string);
+
+  py::class_<PythonH1Module>(module, "H1Module")
+      .def_property_readonly("quotient", &PythonH1Module::quotient)
+      .def_property_readonly(
+          "conormal_module", &PythonH1Module::conormal_module)
+      .def_property_readonly("dimension", &PythonH1Module::dimension)
+      .def_property_readonly(
+          "ambient_dimension", &PythonH1Module::ambient_dimension)
+      .def_property_readonly(
+          "constraint_matrix", &PythonH1Module::constraint_matrix)
+      .def("kernel_coordinates", &PythonH1Module::kernel_coordinates,
+           py::kw_only(),
+           py::arg("max_coordinate_entries") = 1'000'000)
+      .def("basis", &PythonH1Module::basis, py::kw_only(),
+           py::arg("max_coordinate_entries") = 1'000'000)
+      .def("class_of", &PythonH1Module::class_of,
+           py::arg("representative"))
+      .def("__repr__", &PythonH1Module::to_string);
+
+  auto h1_element = py::class_<PythonH1Element>(module, "H1Element")
+      .def_property_readonly("module", &PythonH1Element::module)
+      .def_property_readonly(
+          "representative", &PythonH1Element::representative)
+      .def_property_readonly("coordinates", &PythonH1Element::coordinates)
+      .def("annihilator", &PythonH1Element::annihilator)
+      .def("__eq__", &PythonH1Element::equals, py::is_operator())
+      .def(
+          "__ne__",
+          [](const PythonH1Element& left, const PythonH1Element& right) {
+            return !left.equals(right);
+          },
+          py::is_operator())
+      .def("__repr__", &PythonH1Element::to_string);
+  h1_element.attr("__hash__") = py::none();
+
+  auto quotient_ideal =
+      py::class_<PythonQuotientIdeal>(module, "QuotientIdeal")
+          .def_property_readonly(
+              "quotient", &PythonQuotientIdeal::quotient)
+          .def_property_readonly(
+              "dimension", &PythonQuotientIdeal::dimension)
+          .def_property_readonly(
+              "basis_coordinates", &PythonQuotientIdeal::basis_coordinates)
+          .def_property_readonly(
+              "generators", &PythonQuotientIdeal::generators)
+          .def("is_zero", &PythonQuotientIdeal::is_zero)
+          .def("preimage", &PythonQuotientIdeal::preimage)
+          .def("__eq__", &PythonQuotientIdeal::equals, py::is_operator())
+          .def(
+              "__ne__",
+              [](const PythonQuotientIdeal& left,
+                 const PythonQuotientIdeal& right) {
+                return !left.equals(right);
+              },
+              py::is_operator())
+          .def("__repr__", &PythonQuotientIdeal::to_string);
+  quotient_ideal.attr("__hash__") = py::none();
+
+  auto ideal_preimage =
+      py::class_<PythonIdealPreimage>(module, "IdealPreimage")
+          .def_property_readonly(
+              "quotient_ideal", &PythonIdealPreimage::quotient_ideal)
+          .def_property_readonly(
+              "source_ideal", &PythonIdealPreimage::source_ideal)
+          .def("generators", &PythonIdealPreimage::generators)
+          .def(
+              "__eq__",
+              [](const PythonIdealPreimage& left, const py::object& right) {
+                if (py::isinstance<PythonIdealPreimage>(right)) {
+                  return left.equals(right.cast<PythonIdealPreimage>());
+                }
+                if (py::isinstance<PythonLocalIdeal>(right)) {
+                  return left.equals(right.cast<PythonLocalIdeal>());
+                }
+                return false;
+              },
+              py::is_operator())
+          .def(
+              "__ne__",
+              [](const PythonIdealPreimage& left, const py::object& right) {
+                if (py::isinstance<PythonIdealPreimage>(right)) {
+                  return !left.equals(right.cast<PythonIdealPreimage>());
+                }
+                if (py::isinstance<PythonLocalIdeal>(right)) {
+                  return !left.equals(right.cast<PythonLocalIdeal>());
+                }
+                return true;
+              },
+              py::is_operator())
+          .def("__repr__", &PythonIdealPreimage::to_string);
+  ideal_preimage.attr("__hash__") = py::none();
 
   py::class_<PythonCycleAuditResult>(module, "CycleAuditResult")
       .def_readonly("status", &PythonCycleAuditResult::status)
@@ -3479,6 +4653,14 @@ PYBIND11_MODULE(_laughableengine, module) {
            py::arg("polynomial"),
            py::arg("divisors"))
       .def("ideal", &PythonRing::ideal, py::arg("generators"))
+      .def("local_ideal", &PythonRing::local_ideal,
+           py::arg("generators"), py::kw_only(),
+           py::arg("maximal_power"))
+      .def("quotient", &PythonRing::quotient,
+           py::arg("ideal"), py::kw_only(),
+           py::arg("max_monomials") = 1'000'000,
+           py::arg("max_generated_rows") = 2'000'000,
+           py::arg("max_matrix_triplets") = 20'000'000)
       .def("cotangent_h1", &PythonRing::cotangent_h1,
            py::arg("generators"), py::kw_only(),
            py::arg("maximal_power"),

@@ -4,15 +4,19 @@
 
 # laughableengine
 
-> **Status:** Research prototype v0.3.0. Deliberately narrow: this is not a
-> general computer-algebra system and not a drop-in replacement for Sage or
-> Macaulay2.
+> **Status:** Research prototype v0.3.0. This is a small exact-algebra core
+> designed to grow, not yet a broad computer-algebra system or a drop-in
+> replacement for Sage or Macaulay2.
 
-`laughableengine` 0.3.0 is a small native exact-algebra engine for one
-research workflow: finding and certifying faithful elements in cotangent
-`H1` of a zero-dimensional quotient supported at the origin.
+`laughableengine` starts with exact fields, sparse polynomials, ideals,
+finite quotients, exact matrices, kernels, and annihilators. Its first deep
+vertical is cotangent `H1` for structured zero-dimensional local quotients.
+That calculation is an application assembled from reusable algebraic objects,
+not the identity of the engine.
 
-It is ready to serve as the computational kernel for that workflow.
+The current surface is deliberately modest. The intent is to grow by adding
+clear objects and operations with stable meanings, while keeping the exact
+arithmetic and performance-oriented representations underneath them.
 
 ## Implementation provenance
 
@@ -27,17 +31,29 @@ the C++ and Python standard libraries. Sage is used only as an independent
 test oracle; Sage and Macaulay2 are not runtime dependencies, and no Sage or
 Macaulay2 source code is included.
 
-For `P = k[x_1,...,x_e]`, `Q = P/J`, and a proposed representative `g`, the
-primary contract is
+## Exact algebra first
 
-```text
-g in J,  every partial_i(g) in J,  and  (J^2 : g) = J.
+The ordinary public objects are rings, polynomials, ideals, quotients, finite
+presentations, linear maps, and elements. Substantial operations have one
+descriptive meaning:
+
+```python
+import laughableengine as le
+
+P = le.QQ("x y", order="grevlex")
+x, y = P.gens()
+I = P.ideal([x**2 - y, y**3])
+
+basis = I.groebner_basis
+remainders = I.normal_forms([x**4, x*y])
+standard = I.standard_monomials()
+K = I.square().colon(x)
 ```
 
-The engine also constructs `J/J^2`, the derivative kernel, `Soc(Q)`, and the
-full bilinear socle action. It searches the resulting exact matrix space for
-one full-socle-rank element and confirms every hit again by the principal
-colon test.
+This is the level on which new functionality should compose. Specialized
+algorithms may exploit a structured representation internally, but they must
+still return inspectable algebraic objects and must state their supported
+domain explicitly.
 
 ## What 0.3 implements
 
@@ -48,14 +64,16 @@ colon test.
   monomials, quotient coordinates, ideal products and squares, principal
   colons, ideal equality, and small elimination jobs.
 - Exact dense and genuinely sparse rank, kernel, image, and solve.
-- `audit_cycle(J,g)`, colon closure, and `full_h1_action(J)` with replayable
-  evidence and explicit resource-limit states.
-- A sparse truncated `cotangent_h1(generators, maximal_power=N)` path for the
-  structured local ideal `J = (generators) + m^N`. It computes the complete
-  conormal/kernel presentation without constructing a Groebner basis of
-  `J^2`; explicit conormal and `H1` basis vectors remain opt-in.
+- Structured local ideals `J=(G)+m^N`, finite quotients `P/J`, conormal
+  modules, derivative maps, their exact kernels, and elements of those
+  kernels. The sparse implementation avoids constructing a Groebner basis of
+  `J^2`; explicit conormal and `H1` bases remain opt-in.
 - `macaulay_annihilator(F_1,...,F_t)` through one sparse kernel computation in
   degrees at most `D+1`, with ordinary and divided-power conventions.
+- Optional research workflows: `audit_cycle(J,g)`, colon closure,
+  `full_h1_action(J)`, packed finite-field screening, and independent
+  certificate replay. These compose the core operations for the original
+  search problem; they are not the primary algebraic abstraction.
 - A packed `GF(p)` discovery path using packed monomials, compiled border
   rewrite tables, batched reductions, and sparse packed matrices.
 - Deterministic candidate-parallel cycle and inverse-system searches.
@@ -68,11 +86,11 @@ The source tree's [DESIGN.md](DESIGN.md) records the intentionally explicit
 API philosophy. [HANDOFF.md](HANDOFF.md) lists the other agent's entry points,
 while [ROADMAP.md](ROADMAP.md) records measured limits and future work.
 
-## Direct cotangent kernel for `J = (G) + m^N`
+## Structured local quotients and cotangent `H1`
 
-The specialized cotangent path takes exactly three mathematical inputs: a
-polynomial ring `P`, a list `G` of polynomials vanishing at the origin, and a
-positive integer `N`. Its ideal is always
+The structured local-ideal constructor takes exactly three mathematical
+inputs: a polynomial ring `P`, a list `G` of polynomials vanishing at the
+origin, and a positive integer `N`. It constructs
 
 ```text
 J = ideal(G) + maximal_ideal^N.
@@ -80,76 +98,98 @@ J = ideal(G) + maximal_ideal^N.
 
 There is no type-dependent reinterpretation of `G` and no implicit choice of
 truncation. In particular, `maximal_power=N` means the exponent `N` in this
-formula; it is not a matrix-size limit or a search heuristic.
+formula; it is not a matrix-size limit or a search heuristic. The calculation
+then follows ordinary objects:
 
-Put `Q=P/J` and `B=P/J^2`. Because `m^(2N)` is contained in `J^2`, both
-quotients are computed exactly inside the finite monomial space of degrees
-less than `2N`. The returned presentation stores the sparse maps
+```python
+J = P.local_ideal(generators=G, maximal_power=N)
+R = J.quotient()
+C = R.conormal_module()
+d = C.derivative_map()
+H1 = d.kernel()
+```
+
+This chain is also the internal computation boundary, not just a pleasant
+facade. `J.quotient()` builds only `P/J`; `R.conormal_module()` then builds
+`P/J^2` and the reduction map; `C.derivative_map()` builds the derivative
+matrix; `d.kernel()` builds and ranks the stacked constraint; and
+`xi.annihilator()` builds the class-multiplication matrix and its kernel. Each
+immutable handle retains its parent data, and repeated traversal of one
+quotient context reuses the completed stages. A limit for a later stage cannot
+make an earlier operation fail before that stage is requested.
+
+Put `R=P/J` and `B=P/J^2`. The quotient `R` is computed exactly in degrees
+less than `N`. When conormal data is requested, the containment
+`m^(2N) in J^2` makes `B` an exact finite computation in degrees less than
+`2N`. The objects retain the sparse maps
 
 ```text
-reduction:   B -> Q             f |-> f
-derivative:  B -> Q^e           f |-> df
-h1 relation: B -> Q + Q^e       f |-> (f, df)
+reduction:          B -> R       f |-> f
+derivative:         B -> R^e     f |-> df
+stacked constraint: B -> R+R^e   f |-> (f, df)
 ```
 
 and therefore
 
 ```text
-J/J^2 = kernel(reduction),       H1(L_(Q/k)) = kernel(h1 relation).
+J/J^2 = kernel(reduction),       H1(L_(R/k)) = kernel(stacked constraint).
 ```
 
 Equivalently, the usual conormal map
-`J/J^2 -> Omega_(P/k) tensor_P Q` is `derivative_matrix` restricted to
-`kernel(reduction_matrix)`. The stacked matrix computes that restricted
+`J/J^2 -> Omega_(P/k) tensor_P R` is the derivative map restricted to the
+conormal module. The stacked constraint matrix computes that restricted
 kernel without first expanding a large conormal basis.
 
-This is a complete computation of `H1`: `h1_relation_matrix`, its exact rank,
-and `h1_dimension` determine the kernel. Explicit vectors are still
-available. `h1_kernel_coordinates(limits)` returns exact coordinate vectors
-and `h1_basis(limits)` returns the corresponding polynomials. These are
+This is a complete computation of `H1`: `H1.constraint_matrix`, its exact
+rank, and `H1.dimension` determine the kernel. Explicit vectors are still
+available. `H1.kernel_coordinates(max_coordinate_entries=...)` returns exact
+coordinate vectors and `H1.basis(max_coordinate_entries=...)` returns the
+corresponding polynomials. These are
 separate materialization requests because they can use much more memory. They
 either return the complete exact basis or raise a resource-limit error; there
 is no dense, numeric, sampled, or partial fallback. The same complete-versus-
-materialized distinction applies to the conormal basis.
+materialized distinction applies to `C.basis(max_coordinate_entries=...)`.
 
 Coordinates are stable and inspectable. Ambient monomials are ordered first
 by increasing total degree and then by descending lexicographic exponent
 tuple. Quotient bases are the nonpivot monomials in that order. Every sparse
-matrix acts on column vectors: columns of `reduction_matrix`,
-`derivative_matrix`, and `h1_relation_matrix` use the standard-monomial basis
-of `P/J^2`; reduction rows use the basis of `Q`; derivative rows are grouped
-by variable, with one `Q` block per variable; and `h1_relation_matrix` stacks
+matrix acts on column vectors: columns of `C.constraint_matrix`,
+`d.ambient_matrix`, and `H1.constraint_matrix` use the standard-monomial basis
+of `P/J^2`; reduction rows use the basis of `R`; derivative rows are grouped
+by variable, with one `R` block per variable; and `H1.constraint_matrix` stacks
 the reduction block before those derivative blocks.
 
-The C++ entry point is deliberately data-first:
+An element and its annihilator are ordinary objects as well:
 
-```cpp
-auto H = cotangent_h1(CotangentH1Spec{
-    ring,
-    std::vector{lower_generator_1, lower_generator_2},
-    std::size_t{4},
-});
-auto proof = H.verify_class(candidate);
+```python
+xi = H1.class_of(g)
+ann = xi.annihilator()
+colon = ann.preimage()
 ```
 
-For a completed class check, `verify_class(g)` constructs the exact linear
-map `Q -> J/J^2`, `q |-> qg`. Its kernel is
-`Ann_Q([g]) = (J^2:g)/J`, so rank-nullity gives equivalent certificates:
+`class_of(g)` requires `g in J` and every partial derivative of `g` to lie in
+`J`. Multiplication by the resulting class is the exact linear map
+`R -> J/J^2`, `q |-> qg`. Its kernel is
+`Ann_R([g]) = (J^2:g)/J`, and `ann.preimage()` is the ideal `J^2:g` in `P`.
+Thus the mathematical equivalences are
 
 ```text
-rank = length(Q)  <=>  annihilator_dimension = 0
+rank = length(R)  <=>  ann = R.zero_ideal()
                   <=>  (J^2:g) = J.
 ```
 
-Thus `faithful` and `colon_equals_ideal` are exact consequences of the stored
-multiplication matrix. The proof exposes `annihilator_basis` in the documented
-`Q` basis and explicit `colon_generators` for `J^2:g`; these are evidence, not
-hidden fallback calculations. `audit_cycle(J,g)` remains available when a
-separate Groebner/colon replay is wanted for a small general ideal.
+The engine returns those algebraic objects; the calling example decides which
+equality expresses its theorem. Version 0.3 retains
+`P.cotangent_h1(...).verify_class(g)`, `CotangentClassProof`, and their
+`faithful`/`colon_equals_ideal` summary flags as compatibility workflow APIs.
+New code should use the object chain above. `audit_cycle(J,g)` likewise remains
+available when a separate Groebner/colon replay is wanted for a small general
+ideal.
 
 ### E10 complete regression
 
-The characteristic-zero E10 example fits the specialized interface exactly:
+The characteristic-zero E10 example assembles the general structured objects
+directly:
 
 ```python
 import laughableengine as le
@@ -160,20 +200,30 @@ xs = P.gens()
 F = sum((x**3 for x in xs), P.zero()) + le.elementary_symmetric(xs, 4)
 partials = [F.derivative(x) for x in xs]
 
-H = P.cotangent_h1(generators=partials, maximal_power=4)
-proof = H.verify_class(F)
+J = P.local_ideal(generators=partials, maximal_power=4)
+R = J.quotient()
+C = R.conormal_module()
+H1 = C.derivative_map().kernel()
 
-assert H.length_Q == 176
-assert H.length_P_mod_J2 == 2728
-assert H.conormal_dimension == 2552
-assert H.h1_dimension == 1873
-assert proof.multiplication_rank == 176
-assert proof.annihilator_dimension == 0
-assert proof.faithful
-assert proof.colon_equals_ideal
-assert len(proof.colon_generators) == 725
+assert R.remainder(F).is_zero()
+assert all(R.remainder(partial).is_zero() for partial in partials)
+xi = H1.class_of(F)
 
-explicit_h1 = H.h1_basis()
+ann = xi.annihilator()
+colon = ann.preimage()
+
+assert R.length == 176
+assert R.square_quotient_length == 2728
+assert H1.constraint_matrix.shape[1] == R.square_quotient_length
+assert C.dimension == 2552
+assert H1.dimension == 1873
+assert ann.dimension == 0
+assert ann.generators == []
+assert ann == R.zero_ideal()
+assert colon == J
+assert len(colon.generators()) == 725
+
+explicit_h1 = H1.basis()
 assert len(explicit_h1) == 1873
 assert sum(f.term_count() for f in explicit_h1) == 2092
 ```
@@ -196,7 +246,7 @@ special case, dense or numeric fallback, Sage call, or Macaulay2 call.
 
 Indicative Release timings on the development Mac Studio were:
 
-| Coefficient field | Presentation build | Class proof | Explicit `H1` basis |
+| Coefficient field | Presentation build | Class + annihilator | Explicit `H1` basis |
 |---|---:|---:|---:|
 | exact `QQ` | `201.5 s` | `17.8 s` | `0.24 s` |
 | `GF(101)` comparison | `6.66 s` | `0.36 s` | not separately timed |
@@ -219,38 +269,41 @@ This installs the Python API and the independent `laughable-jg-verify`
 command. The native `laughable` executable is built and installed through
 CMake, not included in the wheel.
 
-Use the exact API over either `QQ` or `GF(p)`:
+Use the same exact-algebra objects over either `QQ` or `GF(p)`:
 
 ```python
 import laughableengine as le
 
-R = le.GF(5, "x")
-(x,) = R.gens()
-J = R.ideal([x**5])
+P = le.GF(5, "x y")
+x, y = P.gens()
+I = P.ideal([x**2, y**3])
 
-audit = R.audit_cycle(J, x**5)
-assert audit.cycle_valid
-assert audit.colon_ideal == J
-assert audit.faithful
+assert I.is_zero_dimensional()
+assert I.quotient_dimension() == 6
+assert I.normal_form(x**3 + y) == y
 
-h1 = R.full_h1_action(J)
-assert h1.h1_dimension == 5
-assert h1.socle_dimension == 1
-assert h1.has_faithful_witness
-assert h1.faithful_witness_audit.faithful
+K = I.square().colon(x)
+assert x**3 in K
 ```
 
-Use the packed finite-field API for discovery. A hit is still colon-certified
-unless `certify_hits=False` is explicitly requested:
+### Optional research workflows
+
+The packed finite-field screen and candidate-parallel drivers remain available
+for the original search workload. A reported hit is colon-certified unless
+`certify_hits=False` is explicitly requested:
 
 ```python
-screen = R.screen_full_h1(J)
+P = le.GF(5, "x")
+(x,) = P.gens()
+J = P.ideal([x**5])
+
+screen = P.screen_full_h1(J)
 assert screen.status == "complete"
 assert screen.maximum_individual_rank == 1
 assert screen.hit
 
-candidates = [x**5, R.zero(), x**6] * 100
-records = R.screen_cycles_parallel(
+candidates = [x**5, P.zero(), x**6] * 100
+records = P.screen_cycles_parallel(
     J, candidates, workers=4, certify_hits=False
 )
 ```
@@ -297,20 +350,21 @@ cmake --build build --target laughableengine_check_e10_qq
 The same check through the public Python API is
 [`examples/e10_direct.py`](examples/e10_direct.py).
 
-Representative commands:
+The CLI exposes the algebraic primitives first and retains the original
+research commands for compatibility. Representative commands are:
 
 ```sh
-./build/laughable --field 'GF(5)' --vars x \
-  audit --g 'x^5' 'x^5'
+./build/laughable --field QQ --vars x,y --order lex \
+  gb 'x^2-y' 'x*y-1'
+
+./build/laughable --field QQ --vars x,y \
+  nf 'x^3+y' --by 'x^2' --by 'y^3'
+
+./build/laughable --field QQ --vars x,y \
+  colon --g x 'x^2' 'x*y' 'y^3'
 
 ./build/laughable --field 'GF(5)' --vars x \
   cotangent-h1 --maximal-power 5
-
-./build/laughable --field 'GF(5)' --vars x \
-  verify-h1-class --maximal-power 5 --g 'x^5'
-
-./build/laughable --field 'GF(5)' --vars x \
-  screen-h1 'x^5'
 
 ./build/laughable --field QQ --vars x,y \
   inverse-system 'x^2+y'
@@ -325,7 +379,7 @@ completed computation, including a conclusive negative. Exit `2` is invalid
 input, `3` is resource-limited/inconclusive, and `1` is an internal or I/O
 failure.
 
-## Independent verification
+## Optional workflow certificate verifier
 
 The `certificate` command emits only the raw field, variables, order, original
 generators of `J`, and `g`. It deliberately does not serialize the engine’s
@@ -344,7 +398,7 @@ failure exits `1`. A CMake install names the verifier
 `laughable-jg-verify`.
 
 Python can emit the same strict JSON with
-`R.make_jg_certificate(generators, g)`.
+`P.make_jg_certificate(generators, g)`.
 
 ## C++ and CMake
 
@@ -354,11 +408,11 @@ Python can emit the same strict JSON with
 using namespace laughableengine;
 
 int main() {
-  auto ring = make_ring(GF(5), {"x"}, Order::Grevlex);
+  auto ring = make_ring(QQ(), {"x", "y"}, Order::Grevlex);
   auto x = ring.gen("x");
-  Ideal<PrimeField> ideal(ring, {x.pow(5)});
-  auto result = audit_cycle(ideal, x.pow(5));
-  return result.faithful_cycle() ? 0 : 1;
+  auto y = ring.gen("y");
+  Ideal<RationalField> ideal(ring, {x.pow(2), y.pow(3)});
+  return ideal.quotient_dimension() == 6 ? 0 : 1;
 }
 ```
 
@@ -369,19 +423,22 @@ find_package(laughableengine CONFIG REQUIRED)
 target_link_libraries(my_target PRIVATE laughableengine::laughableengine)
 ```
 
-The umbrella header exposes the exact kernel, packed discovery types,
-candidate executor, inverse-system driver, reconstruction helpers, and JSON
-certificate writer.
+The umbrella header exposes exact fields, polynomials, ideals, quotients,
+matrices, structured local-quotient objects, and their operations. It also
+includes the optional packed discovery types, candidate executor,
+inverse-system driver, reconstruction helpers, and JSON certificate writer.
 
-## Correctness gates
+## Regression coverage
 
-The native suite checks all mandatory examples:
+The native suite checks the general polynomial/ideal kernel, exact linear
+algebra, structured local-quotient objects, and the current research
+workflows. The larger vertical regressions include:
 
 | Case | Exact result |
 |---|---|
 | Supplied three-variable seed | `length(Q)=11`, `length(P/J^2)=48`, `dim(H1)=19`, socle `3`, maximum individual rank `1` |
-| `G=x^3+y^7+x*y^5` Tjurina ideal | lengths `11/34`, `dim(H1)=15`, socle `2`, maximum rank `1`, distinguished class nonfaithful |
-| `GF(5)`, `J=(x^5)` | `[x^5]` is a faithful primitive class |
+| `G=x^3+y^7+x*y^5` Tjurina ideal | lengths `11/34`, `dim(H1)=15`, socle `2`, maximum rank `1`, distinguished class has nonzero annihilator |
+| `GF(5)`, `J=(x^5)` | the annihilator of `[x^5]` is the zero ideal |
 | Characteristic-zero homogeneous example | socle action is zero |
 | Non-origin quotient `(x^2-x)` | rejected by the full-`H1` origin-support gate |
 
@@ -391,7 +448,7 @@ full-column-rank witnesses, generic-only bounds, and resource exhaustion.
 `Ann_Q(H1)` is diagnostic only and is never substituted for the required
 individual-witness test.
 
-## Apple Silicon performance
+## Current research-workload performance on Apple Silicon
 
 Release medians on an Apple M2 Ultra Mac Studio are approximately:
 
@@ -410,7 +467,7 @@ scaling is useful, but remains sensitive to scheduling and memory locality.
 
 ## Deliberate limits
 
-- This is a narrow research kernel, not a general-purpose CAS.
+- This is a growing exact-algebra core, not yet a general-purpose CAS.
 - The structured cotangent path is finite and exact, but its ambient monomial
   count grows combinatorially with the variable count and `maximal_power`.
   Explicit resource limits fail loudly instead of changing the algorithm or

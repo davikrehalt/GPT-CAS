@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "laughableengine"
 version = "0.3.0"
-description = "A native exact kernel for cotangent-H1 computations"
+description = "A small native exact-algebra engine designed to grow"
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.9"

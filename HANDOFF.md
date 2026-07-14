@@ -2,13 +2,15 @@
 
 ## Status
 
-The narrow replacement contract is implemented and integrated. The next
-agent can build search families or continue optimization on top of stable
-C++, Python, and CLI entry points; it should not need Sage or Macaulay2 in a
-production computation.
+The exact polynomial/ideal kernel and the first structured local-quotient
+vertical are implemented and integrated. The next agent can extend reusable
+algebraic objects, build search families, or continue optimization on top of
+stable C++, Python, and CLI entry points. Production computations do not need
+Sage or Macaulay2.
 
-“Ready” here means ready for the faithful cotangent-`H1` workflow. It does not
-mean a broad Sage/Macaulay2 replacement.
+“Ready” means the documented operations and the structured cotangent-`H1`
+case study are executable and exact. It does not mean the project is already
+a broad Sage/Macaulay2 replacement.
 
 New public APIs should follow `DESIGN.md`: named operations, explicit input
 records, immutable evidence objects, stable coordinate conventions, and no
@@ -16,20 +18,24 @@ Macaulay2-style type-directed reinterpretation of a command.
 
 ## Stable contracts
 
-1. `audit_cycle(J,g)` verifies `g in J`, verifies every partial derivative is
-   in `J`, computes `J^2:g`, and reports a hit exactly when `J^2:g == J`.
-2. `cotangent_h1({ring,generators,maximal_power=N})` has one deliberately
-   narrow meaning: `J=(generators)+m^N`. It constructs exact sparse matrices
-   for `P/J^2 -> P/J`, `f |-> df`, and `f |-> (f,df)`, so both `J/J^2` and the
-   complete cotangent `H1` are kernels. It does not construct a Groebner basis
-   of `J^2`.
-3. `full_h1_action(J)` computes `J/J^2`, the derivative kernel, `Soc(P/J)`,
-   the bilinear action, and exact-arithmetic rank bounds with an explicit proof
-   state. A full-rank witness is always sent through `audit_cycle` again.
+1. Exact rings, polynomials, ideals, Groebner bases, batched normal forms,
+   standard monomials, ideal products, principal colons, equality, and exact
+   linear algebra are independent reusable operations.
+2. `local_ideal({ring,generators,maximal_power=N})` has one deliberately narrow
+   meaning: `J=(generators)+m^N`. The chain `J.quotient()`,
+   `R.conormal_module()`, `C.derivative_map()`, and `d.kernel()` exposes the
+   quotient, conormal module, derivative map, and complete cotangent `H1` as
+   separate objects. It does not construct a Groebner basis of `J^2`.
+3. `H1.class_of(g)` validates a class; `xi.annihilator()` returns its actual
+   quotient ideal; and `ann.preimage()` returns `J^2:g` in the polynomial
+   ring. The example, not the core, decides whether equality with the zero
+   ideal or with `J` proves a theorem.
 4. `macaulay_annihilator(Fs)` builds one sparse action matrix through degree
    `D+1`, takes its exact kernel, and returns the compact annihilator ideal.
-5. Packed discovery is finite-field-only. Exact `QQ` is the final
-   reconstruction/certification layer.
+5. `audit_cycle`, `full_h1_action`, colon closure, packed screening, and
+   certificate replay are optional compatibility/research workflows assembled
+   from the core. Packed discovery is finite-field-only; exact `QQ` remains the
+   final reconstruction/certification layer.
 6. Resource exhaustion is reported as inconclusive and is never silently
    converted into a negative mathematical answer.
 
@@ -51,8 +57,8 @@ polynomials, deterministic reduced bases, batched normal forms, standard
 monomials, ideals, `J^2`, colons, equality, and native sparse elimination.
 The exact monomial representation accepts one to sixteen variables. The
 packed discovery representation is a separate six-lane type; do not let its
-six-variable limit leak into exact APIs, and do not route the ten-variable
-E10 computation through it.
+six-variable limit leak into exact APIs or route higher-variable exact jobs
+through it.
 
 ### B. Finite quotient and `H1` action
 
@@ -74,12 +80,21 @@ packed `GF(p)` path. `CompiledPrimeQuotientPlan` compiles border actions once
 and reduces batches without scalar normal-form calls. Keep the exact path as a
 differential oracle when optimizing packed code.
 
-`cotangent_h1.hpp` is the scalable exact path for the structured local input
-`J=(G)+m^N`. It works in `P/m^(2N)`, which is exact because
-`m^(2N) subset J^2`. It returns a `CotangentH1Presentation`; the presentation
-is already the complete answer even when no explicit kernel basis is
-materialized. Do not replace it with a Groebner basis of `J^2` merely to make
-the output resemble the older general-ideal path.
+`cotangent_h1.hpp` is the scalable exact implementation for the structured
+local input `J=(G)+m^N`. It works in `P/m^(2N)`, which is exact because
+`m^(2N) subset J^2`. The public façade exposes a structured ideal, quotient,
+conormal module, derivative map, kernel, kernel element, annihilator ideal, and
+ambient preimage. The underlying presentation is already the complete answer
+even when no explicit kernel basis is materialized. Do not replace it with a
+Groebner basis of `J^2` merely to make the output resemble the older
+general-ideal path.
+
+The implementation boundary is real: quotient data, conormal/`J^2` data, the
+ambient derivative matrix, and the stacked `H1` kernel presentation are four
+immutable stages cached with `call_once` inside one exact quotient context.
+Annihilator multiplication is a fifth request-only calculation. Preserve
+these boundaries when optimizing: a resource limit in a later stage must not
+make an earlier object fail before that stage is requested.
 
 ### C. Inverse systems and search drivers
 
@@ -102,7 +117,7 @@ bounded centered coefficients at two distinct primes. It is intentionally not
 general CRT/rational reconstruction, and a lifted polynomial is not a hit
 until an exact `QQ` audit succeeds.
 
-### D. Independent verifier
+### D. Optional independent verifier
 
 Primary files:
 
@@ -123,10 +138,15 @@ rank needed to certify `J^2:g == J`.
 
 Include `laughableengine/laughableengine.hpp`. Important functions/types are:
 
-- `audit_cycle`, `colon_closure`, `full_h1_action`
-- `cotangent_h1`, `CotangentH1Spec`, `CotangentH1Presentation`,
-  `CotangentClassProof`
+- `PolynomialRing`, `Polynomial`, `Ideal`, `QuotientContext`, exact dense and
+  sparse matrices, Groebner bases, normal forms, kernels, and solves
+- `origin_power_ideal`, `quotient`, `conormal_module`, `derivative_map`, and
+  `kernel`; their returned objects provide `class_of`, `annihilator`, and
+  `preimage`
 - `macaulay_annihilator`
+- compatibility/workflow entry points `audit_cycle`, `colon_closure`,
+  `full_h1_action`, `cotangent_h1`, `CotangentH1Spec`,
+  `CotangentH1Presentation`, and `CotangentClassProof`
 - `screen_cycle`, `screen_full_h1`, `PackedCycleDiscoverySession`
 - `screen_cycles_parallel`, `search_inverse_systems_parallel`
 - `reduce_mod_prime`, `screen_signature`,
@@ -138,11 +158,15 @@ Include `laughableengine/laughableengine.hpp`. Important functions/types are:
 Construct rings with `laughableengine.QQ(...)` or `laughableengine.GF(...)`.
 The corresponding `Ring` methods are:
 
-- `audit_cycle`, `colon_closure`, `full_h1_action`
-- `cotangent_h1(generators=..., maximal_power=N)`; the returned presentation
-  has `verify_class(g)`, `h1_kernel_coordinates(limits)`, and
-  `h1_basis(limits)`
+- foundational polynomial and ideal operations such as `ideal`,
+  `groebner_basis`, `normal_form`, `normal_forms`, `square`, `colon`, and
+  `standard_monomials`
+- `local_ideal(generators=..., maximal_power=N)`, followed by `quotient`,
+  `conormal_module`, `derivative_map`, `kernel`, `class_of`, `annihilator`, and
+  `preimage`
 - `macaulay_annihilator`
+- compatibility/workflow methods `audit_cycle`, `colon_closure`,
+  `full_h1_action`, and `cotangent_h1(...).verify_class(g)`
 - `screen_cycle`, `screen_full_h1`, `screen_cycles_parallel`
 - `search_inverse_systems`
 - `make_jg_certificate`
@@ -152,12 +176,14 @@ release the GIL around the complete native job.
 
 ### CLI
 
-The relevant commands are `audit`, `closure`, `h1`, `cotangent-h1`,
-`verify-h1-class`, `screen-audit`, `screen-h1`, `inverse-system`, and
-`certificate`. Both structured cotangent commands require
-`--maximal-power N`; positional polynomials are the lower generators `G` in
-`J=(G)+m^N`. `--apolarity ordinary` and `--apolarity divided` select the
-inverse-system convention.
+The CLI exposes ordinary algebra commands (`print`, `diff`, `nf`, `divide`,
+`gb`, `dim`, `std`, `colon`, and `eliminate`) alongside compatibility/research
+commands (`audit`, `closure`, `h1`, `cotangent-h1`, `verify-h1-class`,
+`screen-audit`, `screen-h1`, `inverse-system`, and `certificate`). Both
+structured cotangent commands require `--maximal-power N`; positional
+polynomials are the lower generators `G` in `J=(G)+m^N`.
+`--apolarity ordinary` and `--apolarity divided` select the inverse-system
+convention.
 
 Exit status is stable: `0` completed, `2` invalid input, `3`
 resource-limited/inconclusive, and `1` internal/I/O failure. The independent
@@ -165,41 +191,47 @@ verifier also uses `2` for a conclusive nonfaithful certificate.
 
 ## Structured cotangent coordinate contract
 
-For `J=(G)+m^N`, the presentation works in `B=P/J^2` using the exact
-truncation `P/m^(2N)`. Its public matrices all act on column vectors:
+For `J=(G)+m^N`, the implementation works in `B=P/J^2` using the exact
+truncation `P/m^(2N)`. Put `R=P/J`, `C=R.conormal_module()`,
+`d=C.derivative_map()`, and `H1=d.kernel()`. Their public matrices all act on
+column vectors:
 
-- `reduction_matrix : B -> Q` represents `f |-> f mod J`;
-- `derivative_matrix : B -> Q^e` represents `f |-> df mod J`;
-- `h1_relation_matrix : B -> Q + Q^e` is the vertical stack of reduction
+- `C.constraint_matrix : B -> R` represents `f |-> f mod J`;
+- `d.ambient_matrix : B -> R^e` represents `f |-> df mod J`;
+- `H1.constraint_matrix : B -> R + R^e` is the vertical stack of reduction
   followed by the derivative blocks.
 
-Consequently `conormal_dimension = nullity(reduction_matrix)` and
-`h1_dimension = nullity(h1_relation_matrix)`. This is the complete kernel
-presentation. `h1_kernel_coordinates(limits)` exposes the exact coordinate
-kernel and `h1_basis(limits)` exposes its polynomial representatives. These
-are optional materialization requests, not prerequisites for a complete
-result. They return a complete exact basis or a resource-limit error; there is
-no dense, numeric, sampled, or partial fallback.
+Consequently `C.dimension = nullity(C.constraint_matrix)` and
+`H1.dimension = nullity(H1.constraint_matrix)`. This is the complete kernel
+presentation. `H1.kernel_coordinates(max_coordinate_entries=...)` exposes the
+exact coordinate kernel and `H1.basis(max_coordinate_entries=...)` exposes its
+polynomial representatives. These are
+optional materialization requests, not prerequisites for a complete result.
+They return a complete exact basis or a resource-limit error; there is no
+dense, numeric, sampled, or partial fallback.
 
 Ambient monomials are ordered by increasing total degree, then descending
 lexicographic exponent tuple. The quotient bases are the nonpivot monomials
-in that order. Reduction rows use the `Q` basis. Derivative rows use one
-`Q`-coordinate block per variable in ring-variable order. Class
-multiplication matrices have `P/J^2` rows and `Q` columns.
+in that order. Reduction rows use the `R` basis. Derivative rows use one
+`R`-coordinate block per variable in ring-variable order. Class
+multiplication matrices have `P/J^2` rows and `R` columns.
 
-For a valid representative `g`, `verify_class(g)` computes
-`mu_g : Q -> J/J^2`. The exact identity
+For a valid `xi=H1.class_of(g)`, `xi.annihilator()` computes the quotient ideal
+which is the kernel of `mu_g : R -> J/J^2`. The exact identity
 
 ```text
-kernel(mu_g) = Ann_Q([g]) = (J^2:g)/J
+kernel(mu_g) = Ann_R([g]) = (J^2:g)/J
 ```
 
-is the reason the proof record may report all of the following equivalent
-facts: full column rank, zero annihilator dimension, faithfulness, and
-`colon_equals_ideal`. The last flag is a rank-nullity certificate of colon
-equality; it is not a second hidden Groebner computation. The proof also
-exposes exact `annihilator_basis` representatives and explicit
-`colon_generators` for `J^2:g`.
+is why `ann.preimage()` returns the ambient ideal `J^2:g`. The objects retain
+exact generators and coordinates. Calling code can compare `ann` with
+`R.zero_ideal()` or its preimage with `J`; those theorem-level comparisons are
+not baked into the element or ideal.
+
+The legacy `CotangentH1Presentation` accessors `reduction_matrix`,
+`derivative_matrix`, and `h1_relation_matrix`, together with
+`verify_class(g)`, expose the same calculation for compatibility. Do not use
+their theorem-oriented summary flags as the model for new APIs.
 
 ## Invariants that must remain true
 
@@ -207,13 +239,13 @@ exposes exact `annihilator_basis` representatives and explicit
 - If `g in J`, then `J` is contained in `J^2:g`.
 - Every returned `H1` representative lies in `J` and all of its derivatives
   lie in `J`.
-- In a structured presentation, `h1_relation_matrix` is exactly the vertical
-  stack of `reduction_matrix` and `derivative_matrix`, and its nullity equals
-  the reported `h1_dimension`.
-- Materialized `h1_kernel_coordinates` span exactly the kernel of
-  `h1_relation_matrix`, and `h1_basis` uses the documented `P/J^2` basis.
-- Every returned annihilator basis element kills the class, and the returned
-  `colon_generators` generate `J^2:g`.
+- In a structured presentation, `H1.constraint_matrix` is exactly the vertical
+  stack of `C.constraint_matrix` and `d.ambient_matrix`, and its nullity equals
+  `H1.dimension`.
+- Materialized `H1.kernel_coordinates()` span exactly the kernel of
+  `H1.constraint_matrix`, and `H1.basis()` uses the documented `P/J^2` basis.
+- Every generator of `xi.annihilator()` kills the class, and the generators of
+  `xi.annihilator().preimage()` generate `J^2:g`.
 - `d(J^2)` reduces to zero modulo `J`; the truncated square builder checks
   this invariant by default.
 - Every socle representative is killed by every variable modulo `J`.
@@ -222,9 +254,9 @@ exposes exact `annihilator_basis` representatives and explicit
 - Modular integer inputs agree at two primes before any lift.
 - Generic rank over an extension is not mistaken for a base-field witness.
 
-Mandatory numerical regressions are documented in `README.md` and tested in
-`tests/h1.cpp`, `tests/cotangent_h1.cpp`, `tests/discovery.cpp`, and the Sage
-oracle.
+The numerical regression suite is documented in `README.md` and tested in
+`tests/finite_algebra.cpp`, `tests/h1.cpp`, `tests/cotangent_h1.cpp`,
+`tests/discovery.cpp`, and the Sage oracle.
 
 The completed ten-variable E10 structured regression over exact `QQ` reports:
 
@@ -235,20 +267,22 @@ dimension(J/J^2)             2552
 dimension(H1)                1873
 distinguished-class rank     176
 annihilator dimension        0
-faithful / colon equals J    true / true
+annihilator equals zero      true
+annihilator preimage equals J true
 colon generator count        725
 materialized H1 basis        1873 polynomials / 2092 terms
 ```
 
-This result used the generic `cotangent_h1` implementation with exact sparse
+This result used the general structured-object façade backed by exact sparse
 elimination. There is no E10-specific branch, dense or numeric fallback, or
 external Sage/Macaulay2 computation. Indicative Release timings on the
 development Mac Studio were `201.5 s` to build the exact `QQ` presentation,
-`17.8 s` to verify the class, and `0.24 s` to materialize the already-computed
-kernel as an explicit basis. The same generic computation over `GF(101)` took
-`6.66 s` to build and `0.36 s` to verify, with the same four presentation
-dimensions and rank `176`. These numbers are machine-local; the finite-field
-timings are not the characteristic-zero certification.
+`17.8 s` to construct the class and annihilator, and `0.24 s` to materialize
+the already-computed kernel as an explicit basis. The same generic computation
+over `GF(101)` took `6.66 s` to build and `0.36 s` for the class and
+annihilator, with the same four presentation dimensions and rank `176`. These
+numbers are machine-local; the finite-field timings are not the
+characteristic-zero certification.
 
 ## Build and validation
 
@@ -269,7 +303,7 @@ sage tests/oracles/cotangent_h1_reference.sage
 For a wheel:
 
 ```sh
-"$PYTHON" -m build --wheel --outdir dist-0.3
+"$PYTHON" -m build --wheel --outdir dist-current
 ```
 
 The wheel installs the Python API and a PATH-visible
@@ -279,27 +313,19 @@ native `laughable` executable; use the CMake build above for that CLI.
 Before handing out a binary macOS wheel, inspect its GMP linkage. The current
 project intentionally does not claim that GMP is bundled.
 
-## Validated handoff artifact
+## Binary artifact and validation note
 
-The unambiguous local wheel is
-`dist-0.3/laughableengine-0.3.0-cp313-cp313-macosx_15_0_arm64.whl`
-(683,016 bytes), with SHA-256
-`d9ba0c53a04cf5ce274b550f572f77926e0795f865997ba19d68b130c1df224e`.
-It targets CPython 3.13 on arm64 macOS 15 or newer and dynamically links the
-Homebrew GMP libraries. The older wheel under `dist/` is a retained 0.2
-artifact; do not select wheels with an ambiguous `dist/*.whl` glob.
+Do not hand out an older wheel from `dist/` or `dist-0.3`: a wheel built before
+the structured object façade does not contain the current Python API. Build a
+fresh wheel from the source being handed off, run the Python suite against the
+installed wheel, and inspect its GMP linkage. The project does not currently
+claim that GMP is bundled.
 
-Final validation completed on the development Mac Studio:
-
-- native Release CTest: 21/21 passed;
-- CPython 3.9 and CPython 3.13 builds: 22/22 CTest cases passed on each;
-- clean installed-wheel Python suite: 20/20 passed;
-- ASan plus UBSan suite: 21/21 passed with no findings;
-- independent Sage oracle passed;
-- clean installed CMake package was consumed by an external project;
-- installed native and wheel verifier paths both accepted the faithful
-  `GF(5), J=(x^5), g=x^5` certificate, and the resource-limit path exited 3;
-- Clang static analysis of the Python binding reported no diagnostics.
+Source validation covers the native Release suite, Python bindings, the
+structured finite-algebra object chain, the independent verifier, the Sage
+oracle, sanitizer builds, and external CMake-package consumption. The exact
+ten-variable Python example is an explicit slow check rather than an ordinary
+fast test.
 
 ## Current performance and remaining gaps
 
@@ -320,5 +346,5 @@ The honest remaining performance gaps are:
 - there is no general modular `QQ` reconstruction;
 - Groebner bases remain correctness-first Buchberger rather than F4/FGLM.
 
-These are suitable next-agent tasks. They are not blockers for the supplied
-replacement contract.
+These are suitable next-agent tasks. They are not blockers for the implemented
+0.3 exact-algebra surface or the structured cotangent case study.

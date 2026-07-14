@@ -5,6 +5,9 @@ import pytest
 
 from laughableengine import (
     ColonClosureResult,
+    ConormalDerivativeMap,
+    ConormalModule,
+    CotangentClassError,
     CotangentClassProof,
     CotangentH1InputError,
     CotangentH1Presentation,
@@ -13,17 +16,23 @@ from laughableengine import (
     CycleScreenResult,
     DivisionResult,
     ExactMatrix,
+    FiniteQuotient,
     FullH1ResourceLimit,
     GF,
     H1ActionResult,
+    H1Element,
+    H1Module,
     H1ScreenResult,
     Ideal,
+    IdealPreimage,
     InverseSystemDiscoveryRecord,
     InverseSystemResourceLimit,
     InverseSystemResult,
     MatrixSpaceRankResult,
+    LocalIdeal,
     Polynomial,
     QQ,
+    QuotientIdeal,
     Ring,
     SparseExactMatrix,
     __version__,
@@ -131,6 +140,210 @@ def test_elementary_symmetric_is_small_explicit_and_ring_safe():
     foreign = QQ("a")
     with pytest.raises(ValueError, match="one exact ring context"):
         elementary_symmetric([a, foreign.gen("a")], 1)
+
+
+def test_generic_finite_algebra_object_chain_over_gf():
+    ring = GF(5, "x")
+    (x,) = ring.gens()
+
+    ideal = ring.local_ideal(generators=[], maximal_power=5)
+    assert isinstance(ideal, LocalIdeal)
+    assert ideal.ring is ring
+    assert ideal.lower_generators == []
+    assert ideal.maximal_power == 5
+    assert ideal.generators() == [x**5]
+    assert "maximal_power=5" in repr(ideal)
+
+    quotient = ideal.quotient()
+    assert isinstance(quotient, FiniteQuotient)
+    assert quotient.ring is ring
+    assert quotient.defining_ideal == ideal
+    assert quotient.length == 5
+    assert quotient.square_quotient_length == 10
+    assert quotient.remainder(x**5).is_zero()
+    assert quotient.basis() == [ring.one(), x, x**2, x**3, x**4]
+    assert isinstance(ring.quotient(ideal), FiniteQuotient)
+
+    conormal = quotient.conormal_module()
+    assert isinstance(conormal, ConormalModule)
+    assert conormal.quotient.defining_ideal == ideal
+    assert conormal.dimension == 5
+    assert conormal.constraint_matrix.shape == (5, 10)
+    assert conormal.basis() == [x**5, x**6, x**7, x**8, x**9]
+
+    derivative = conormal.derivative_map()
+    assert isinstance(derivative, ConormalDerivativeMap)
+    assert derivative.domain.dimension == conormal.dimension
+    assert derivative.ambient_matrix.shape == (5, 10)
+
+    h1 = derivative.kernel()
+    assert isinstance(h1, H1Module)
+    assert h1.quotient.length == quotient.length
+    assert h1.conormal_module.dimension == conormal.dimension
+    assert h1.dimension == 5
+    assert h1.ambient_dimension == 10
+    assert h1.constraint_matrix.shape == (10, 10)
+    assert h1.kernel_coordinates() == [
+        (index, index + 5, 1) for index in range(5)
+    ]
+    assert h1.basis() == [x**5, x**6, x**7, x**8, x**9]
+
+    element = h1.class_of(x**5)
+    assert isinstance(element, H1Element)
+    assert element.module.dimension == h1.dimension
+    assert element.representative == x**5
+    assert element.coordinates == [(5, 1)]
+    assert element == h1.class_of(x**5)
+    assert not hasattr(element, "faithful")
+    assert not hasattr(element, "colon_equals_ideal")
+
+    annihilator = element.annihilator()
+    assert isinstance(annihilator, QuotientIdeal)
+    assert annihilator.quotient.length == quotient.length
+    assert annihilator.dimension == 0
+    assert annihilator.is_zero()
+    assert annihilator.generators == []
+    assert annihilator.basis_coordinates == []
+    assert annihilator == quotient.zero_ideal()
+
+    colon = annihilator.preimage()
+    assert isinstance(colon, IdealPreimage)
+    assert colon.quotient_ideal == annihilator
+    assert colon.source_ideal == ideal
+    assert colon.generators() == [x**5]
+    assert colon == ideal
+    assert ideal == colon
+
+    for immutable, attribute, value in (
+        (ideal, "maximal_power", 4),
+        (quotient, "length", 0),
+        (conormal, "dimension", 0),
+        (h1, "dimension", 0),
+        (annihilator, "dimension", 1),
+    ):
+        with pytest.raises(AttributeError):
+            setattr(immutable, attribute, value)
+
+
+def test_generic_finite_algebra_invalid_classes_nonzero_annihilator_and_contexts():
+    ring = QQ("x")
+    (x,) = ring.gens()
+    ideal = ring.local_ideal(generators=[], maximal_power=2)
+    quotient = ring.quotient(ideal)
+    h1 = quotient.conormal_module().derivative_map().kernel()
+
+    with pytest.raises(CotangentClassError, match="defining ideal"):
+        h1.class_of(x)
+    with pytest.raises(CotangentClassError, match="derivative"):
+        h1.class_of(x**2)
+
+    element = h1.class_of(x**3)
+    annihilator = element.annihilator()
+    assert annihilator.dimension == 1
+    assert not annihilator.is_zero()
+    assert annihilator.generators == [x]
+    assert annihilator.basis_coordinates == [[Fraction(0), Fraction(1)]]
+    assert annihilator != quotient.zero_ideal()
+
+    colon = annihilator.preimage()
+    assert colon.generators() == [x**2, x]
+    assert colon != ideal
+    assert ideal != colon
+
+    # Rebuilding the same quotient creates a distinct exact parent context.
+    other_quotient = ideal.quotient()
+    other_h1 = other_quotient.conormal_module().derivative_map().kernel()
+    assert quotient.zero_ideal() != other_quotient.zero_ideal()
+    assert element != other_h1.class_of(x**3)
+
+    foreign_ring = QQ("x")
+    (foreign_x,) = foreign_ring.gens()
+    foreign_ideal = foreign_ring.local_ideal(
+        generators=[], maximal_power=2
+    )
+    with pytest.raises(ValueError, match="exact ring context"):
+        ring.quotient(foreign_ideal)
+    with pytest.raises(ValueError, match="exact ring context"):
+        quotient.remainder(foreign_x)
+    with pytest.raises(ValueError, match="exact ring context"):
+        h1.class_of(foreign_x)
+
+    with pytest.raises(CotangentH1ResourceLimit, match="coordinate entries"):
+        quotient.basis(max_coordinate_entries=1)
+    with pytest.raises(CotangentH1ResourceLimit, match="sparse kernel"):
+        h1.basis(max_coordinate_entries=0)
+    with pytest.raises(CotangentH1InputError, match="maximal_power"):
+        ring.local_ideal(generators=[], maximal_power=0)
+    with pytest.raises(TypeError):
+        ring.local_ideal(
+            generators=ring.ideal([x**2]), maximal_power=2
+        )
+
+
+def test_finite_algebra_materializes_each_stage_only_when_requested():
+    ring = GF(5, "x y")
+    x, y = ring.gens()
+    ideal = ring.local_ideal(generators=[], maximal_power=2)
+
+    # P/J has only 1,x,y, so its quotient arithmetic fits this budget.  The
+    # ten monomials needed for P/J^2 are not requested until conormal_module.
+    quotient_only = ideal.quotient(max_monomials=3)
+    assert quotient_only.length == 3
+    assert quotient_only.remainder(x**2 + y**2).is_zero()
+    with pytest.raises(CotangentH1ResourceLimit, match="monomial"):
+        quotient_only.conormal_module()
+
+    # The conormal reduction matrix has exactly three stored entries.  The
+    # derivative matrix has six, so that stage reaches the next budget.
+    conormal = ideal.quotient(
+        max_matrix_triplets=3
+    ).conormal_module()
+    assert conormal.dimension == 7
+    assert conormal.constraint_matrix.shape == (3, 10)
+    with pytest.raises(CotangentH1ResourceLimit, match="triplets"):
+        conormal.derivative_map()
+
+    # The derivative itself fits six entries; the stacked matrix defining its
+    # kernel has nine and is built only by kernel().
+    derivative = ideal.quotient(
+        max_matrix_triplets=6
+    ).conormal_module().derivative_map()
+    assert derivative.ambient_matrix.shape == (6, 10)
+    with pytest.raises(CotangentH1ResourceLimit, match="triplets"):
+        derivative.kernel()
+
+
+def test_structured_annihilator_preimage_matches_general_groebner_colon():
+    cases = []
+
+    finite_ring = GF(7, "x y")
+    cases.append((finite_ring, [], 2))
+
+    rational_ring = QQ("u v")
+    u, v = rational_ring.gens()
+    cases.append((rational_ring, [u**2 - v**2], 3))
+
+    for ring, lower_generators, maximal_power in cases:
+        structured = ring.local_ideal(
+            generators=lower_generators, maximal_power=maximal_power
+        )
+        quotient = structured.quotient()
+        h1 = quotient.conormal_module().derivative_map().kernel()
+        basis = h1.basis(max_coordinate_entries=100_000)
+        representatives = [ring.zero(), *basis[:2]]
+        if basis:
+            representatives.append(basis[0] + basis[-1])
+
+        # This route uses the separate general Groebner ideal/product/colon
+        # implementation as an oracle for several structured H1 classes.
+        general_ideal = ring.ideal(structured.generators())
+        general_square = general_ideal.square()
+        for representative in representatives:
+            element = h1.class_of(representative)
+            staged_preimage = ring.ideal(
+                element.annihilator().preimage().generators()
+            )
+            assert staged_preimage == general_square.colon(representative)
 
 
 def test_direct_cotangent_h1_presentation_and_faithful_class_over_gf():

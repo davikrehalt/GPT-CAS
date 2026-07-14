@@ -20,6 +20,7 @@
 #include "laughableengine/cycle_audit.hpp"
 #include "laughableengine/h1.hpp"
 #include "laughableengine/cotangent_h1.hpp"
+#include "laughableengine/finite_algebra.hpp"
 #include "laughableengine/discovery.hpp"
 #include "laughableengine/candidate_executor.hpp"
 #include "laughableengine/inverse_discovery.hpp"

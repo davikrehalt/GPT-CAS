@@ -1,14 +1,15 @@
-# laughableengine kernel roadmap
+# laughableengine exact-algebra roadmap
 
 ## Goal
 
-Deliver the narrow native kernel in the faithful cotangent-`H1`
-specification. The production engine audits a distinguished cycle, computes
-the full `H1`/socle action, and generates Artin ideals from Macaulay inverse
-systems without calling Sage or Macaulay2. Sage remains an independent test
-oracle.
+Grow a compact native exact-algebra engine from a trustworthy core. Version
+0.3 supplies exact fields, sparse polynomials, ideals, finite quotients, exact
+linear algebra, and a first deep vertical: structured cotangent `H1` and
+annihilators. Optional search and inverse-system workflows build on that core
+without calling Sage or Macaulay2. Sage remains an independent test oracle.
 
-This is deliberately not a general computer-algebra system.
+This is not yet a general computer-algebra system. The architecture is meant
+to grow without pretending that unimplemented breadth already exists.
 
 ## 0.3.0 completed scope
 
@@ -19,25 +20,26 @@ This is deliberately not a general computer-algebra system.
      normal forms, standard monomials, quotient coordinates, `J^2`, ideal
      equality, zero-dimensional principal colons, and small elimination jobs.
 
-2. **Required cotangent-`H1` contracts**
-   - `audit_cycle(J,g)` checks `g in J`, all derivative memberships, and
-     computes `J^2:g`; a hit is exactly `J^2:g == J`.
-   - `cotangent_h1({ring,generators,maximal_power=N})` specializes to
-     `J=(generators)+m^N`. Sparse row spaces construct `P/J` and `P/J^2`
-     exactly inside degrees `<N` and `<2N`; the complete `H1` presentation is
-     the kernel of `f |-> (f,df)` from `P/J^2` to `P/J + (P/J)^e`.
-   - The structured presentation reports exact dimensions and
-     `h1_relation_matrix` without materializing every kernel vector.
-     `h1_kernel_coordinates(limits)` and `h1_basis(limits)` expose the full
-     exact kernel on request. Class proofs expose `annihilator_basis` and
-     explicit `colon_generators`. Materializers return a complete answer or a
+2. **Structured local-quotient and cotangent-`H1` vertical**
+   - `local_ideal`, `quotient`, `conormal_module`, `derivative_map`, and
+     `kernel` expose the stages as separate algebraic objects. The kernel's
+     exact constraint matrix gives a complete presentation without
+     materializing every vector; `kernel_coordinates(max_coordinate_entries=...)`
+     and `basis(max_coordinate_entries=...)` materialize the full exact kernel
+     on request.
+   - Those public steps are genuine cached computation boundaries: quotient
+     arithmetic does not construct `J^2`, conormal construction does not
+     differentiate, derivative construction does not rank the stacked kernel,
+     and class construction does not compute an annihilator.
+   - `class_of(g)` returns a kernel element, `annihilator()` returns an ideal
+     in the quotient, and `preimage()` returns `J^2:g` in `P`. Examples express
+     theorem conclusions by comparing those ideals; the core does not replace
+     them with a `faithful` flag. Materializers return a complete answer or a
      resource-limit error, never a dense/numeric/partial fallback.
-   - `full_h1_action(J)` constructs `J/J^2`, the differential kernel, the
-     socle, the bilinear action, and exact-arithmetic lower/upper rank bounds
-     with an explicit proof state. Every proposed faithful witness is replayed
-     through the principal-colon audit.
-   - Colon closure retains every intermediate ideal, quotient length, and
-     stop reason.
+   - The compatibility `cotangent_h1` presentation is backed by the same
+     sparse row spaces. They construct `P/J` and `P/J^2` exactly inside degrees
+     `<N` and `<2N`; the complete `H1` presentation is the kernel of
+     `f |-> (f,df)` from `P/J^2` to `P/J + (P/J)^e`.
 
 3. **Macaulay inverse systems**
    - One sparse exact action matrix through degree `D+1` produces
@@ -60,7 +62,11 @@ This is deliberately not a general computer-algebra system.
    - Sparse rank, right kernel, image, and solve use native sparse elimination;
      they do not materialize a dense fallback.
 
-6. **Search and certification workflow**
+6. **Optional search and certification workflows**
+   - `audit_cycle(J,g)` checks membership and derivatives and computes
+     `J^2:g`. `full_h1_action(J)` constructs the differential kernel, socle,
+     bilinear action, and exact rank bounds. Colon closure retains every
+     intermediate ideal, quotient length, and stop reason.
    - Deterministic candidate-parallel execution with a private compiled
      session for every worker and results returned in input order.
    - Compact inverse-system search records retain large bases for full-rank
@@ -69,33 +75,35 @@ This is deliberately not a general computer-algebra system.
      same-support small-integer lift support the finite-field-to-`QQ` handoff.
      Every lifted candidate still requires an exact `QQ` audit.
 
-7. **Independent verification and interfaces**
+7. **Interfaces and optional independent verification**
    - A standalone, standard-library-only `laughable-jg-verify` recomputes a
      proposed `(J,g)` result from raw JSON input. It does not import or invoke
      laughableengine, Sage, Singular, or Macaulay2.
    - Header-only C++, CLI, Python bindings, CMake package, wheel build, tests,
-     and a benchmark harness expose the same narrow contracts.
+     and a benchmark harness expose the implemented contracts.
 
-## Mandatory regression gates
+## Regression gates
 
 - Characteristic-zero homogeneous cases have zero socle action.
 - The supplied three-variable seed has quotient lengths `11/48`, `H1`
   dimension `19`, socle dimension `3`, and maximum individual rank `1`.
 - `G=x^3+y^7+x*y^5` has quotient lengths `11/34`, `H1` dimension `15`,
-  socle dimension `2`, maximum rank `1`, and a nonfaithful distinguished
-  class.
-- In characteristic `p`, `J=(x^p)` detects `[x^p]` as faithful.
+  socle dimension `2`, maximum rank `1`, and a distinguished class with
+  nonzero annihilator.
+- In characteristic `p`, the annihilator of `[x^p]` in `P/(x^p)` is the zero
+  ideal, and its ambient preimage is `(x^p)`.
 - Lifted integer input agrees at `GF(101)` and `GF(103)` before exact `QQ`
   certification.
 - Resource exhaustion is inconclusive, never a mathematical negative.
 - Finite-field matrix-space search never mistakes generic extension-field
   rank for a base-field witness.
-- The independent verifier accepts the golden faithful certificate and
-  rejects malformed, tampered, non-cycle, and nonfaithful inputs.
+- The optional independent verifier accepts the golden faithful certificate
+  and rejects malformed, tampered, non-cycle, and nonfaithful inputs.
 - The completed ten-variable E10 structured case over exact `QQ` has
   `length(Q)=176`, `length(P/J^2)=2728`, conormal dimension `2552`, and `H1`
   dimension `1873`. Its distinguished class has multiplication rank `176`,
-  zero annihilator, and `(J^2:g)=J`; the proof exposes `725` colon generators.
+  annihilator equal to the quotient zero ideal, and annihilator preimage equal
+  to `J`; that preimage exposes `725` generators.
   The fully materialized kernel has `1873` polynomials and `2092` nonzero
   terms. The regression uses the generic sparse path with no special case or
   fallback.
@@ -119,19 +127,22 @@ is still open.
 
 ## Next engineering work
 
-1. Add a 60-bit or SIMD finite-field backend; the current packed discovery
+1. Extend quotient, ideal-in-quotient, module, map, and element abstractions
+   beyond the structured local case only as implemented algorithms can honor
+   their contracts; do not add a broad but hollow façade.
+2. Add a 60-bit or SIMD finite-field backend; the current packed discovery
    path is limited to primes below `2^31`.
-2. Reuse compiled templates across changing ideals with the same initial
+3. Reuse compiled templates across changing ideals with the same initial
    monomial stratum, not only across candidates for one fixed ideal.
-3. Improve parallel scheduling and memory locality beyond four workers;
+4. Improve parallel scheduling and memory locality beyond four workers;
    consider process workers for long Python-driven searches.
-4. Implement general CRT/rational reconstruction. The present two-prime lift
+5. Implement general CRT/rational reconstruction. The present two-prime lift
    accepts only matching, bounded, centered integer coefficients and never
    combines unrelated modular `H1` basis coordinates.
-5. Profile Groebner-heavy families before adding F4/FGLM or modular `QQ`
+6. Profile Groebner-heavy families before adding F4/FGLM or modular `QQ`
    bases. The measured finite-quotient linear-algebra paths no longer justify
    replacing Buchberger merely for fashion.
-6. Bundle GMP when producing redistributable macOS wheels.
+7. Bundle GMP when producing redistributable macOS wheels.
 
 ## Secondary additions
 

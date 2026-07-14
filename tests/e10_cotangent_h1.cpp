@@ -6,22 +6,22 @@
 #include <utility>
 #include <vector>
 
-#include "laughableengine/cotangent_h1.hpp"
 #include "laughableengine/field.hpp"
+#include "laughableengine/finite_algebra.hpp"
 #include "laughableengine/polynomial.hpp"
 #include "support/e10_fixture.hpp"
 
 namespace {
 
-using laughableengine::CotangentClassStatus;
-using laughableengine::CotangentH1Spec;
 using laughableengine::GF;
 using laughableengine::Order;
 using laughableengine::Polynomial;
 using laughableengine::PolynomialRing;
 using laughableengine::QQ;
 using laughableengine::SparseEliminationLimits;
-using laughableengine::cotangent_h1;
+using laughableengine::annihilator;
+using laughableengine::origin_power_ideal;
+using laughableengine::preimage;
 using laughableengine::tests::support::make_e10_fixture;
 
 [[noreturn]] void fail(const std::string& message, int line) {
@@ -52,33 +52,38 @@ void run_e10(Field field) {
   std::vector<Polynomial<Field>> partials(
       fixture.derivatives.begin(), fixture.derivatives.end());
 
-  const auto h1 = cotangent_h1(CotangentH1Spec{
-      ring, std::move(partials), std::size_t{4}});
-  CHECK(h1.length_Q() == 176);
-  CHECK(h1.length_P_mod_J2() == 2728);
-  CHECK(h1.conormal_dimension() == 2552);
-  CHECK(h1.h1_dimension() == 1873);
-  CHECK(h1.ideal_generators().size() == 725);
-  CHECK(h1.reduction_matrix().rank() == 176);
-  CHECK(h1.h1_relation_matrix().column_count() == 2728);
-  CHECK(h1.h1_relation_matrix().rank() == 855);
+  const auto J = origin_power_ideal(
+      ring, std::move(partials), std::size_t{4});
+  const auto R = J.quotient();
+  const auto conormal = R.conormal_module();
+  const auto derivative = conormal.derivative_map();
+  const auto h1 = derivative.kernel();
 
-  const auto proof = h1.verify_class(fixture.potential);
-  CHECK(proof.status == CotangentClassStatus::Complete);
-  CHECK(proof.in_ideal);
-  CHECK(proof.cycle_valid);
-  CHECK(proof.multiplication_rank == 176);
-  CHECK(proof.annihilator_dimension == 0);
-  CHECK(proof.annihilator_coordinates.empty());
-  CHECK(proof.annihilator_basis.empty());
-  CHECK(proof.colon_generators.size() == 725);
-  CHECK(proof.faithful);
-  CHECK(proof.colon_equals_ideal);
+  CHECK(R.dimension() == 176);
+  CHECK(R.square_quotient_dimension() == 2728);
+  CHECK(conormal.dimension() == 2552);
+  CHECK(h1.dimension() == 1873);
+  CHECK(J.generators().size() == 725);
+  CHECK(conormal.defining_matrix().rank() == 176);
+  CHECK(h1.defining_matrix().column_count() == 2728);
+  CHECK(h1.defining_matrix().rank() == 855);
+
+  const auto xi = h1.class_of(fixture.potential);
+  const auto ann = annihilator(xi);
+  CHECK(ann.dimension() == 0);
+  CHECK(ann.basis_coordinates().empty());
+  CHECK(ann.lift_basis().empty());
+  CHECK(ann == R.zero_ideal());
+
+  const auto colon = preimage(ann);
+  CHECK(colon == J);
+  CHECK(colon.equals_source_ideal());
+  CHECK(colon.generators().size() == 725);
 
   SparseEliminationLimits basis_limits;
   basis_limits.max_kernel_nonzeros = 20'000'000;
-  const auto coordinates = h1.h1_kernel_coordinates(basis_limits);
-  const auto basis = h1.h1_basis(basis_limits);
+  const auto coordinates = h1.basis_coordinates(basis_limits);
+  const auto basis = h1.representative_basis(basis_limits);
   CHECK(coordinates.size() == 1873);
   CHECK(basis.size() == 1873);
   std::size_t coordinate_nonzeros = 0;
@@ -86,10 +91,9 @@ void run_e10(Field field) {
   for (std::size_t index = 0; index < basis.size(); ++index) {
     coordinate_nonzeros += coordinates[index].size();
     polynomial_terms += basis[index].term_count();
-    CHECK(h1.quotient_remainder(basis[index]).is_zero());
+    CHECK(R.remainder(basis[index]).is_zero());
     for (std::size_t variable = 0; variable < 10; ++variable) {
-      CHECK(h1.quotient_remainder(
-                   basis[index].derivative(variable))
+      CHECK(R.remainder(basis[index].derivative(variable))
                 .is_zero());
     }
   }
